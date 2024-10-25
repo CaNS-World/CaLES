@@ -12,6 +12,7 @@
 *.xdmf
 *.xmf
 /cans*
+/cales*
 debug/
 test/
 build/
@@ -20,3 +21,4 @@ src/.vscode/
 run/
 src/.depend.mk
 validation/
+build.conf
