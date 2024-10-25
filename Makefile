@@ -16,7 +16,7 @@ SHELL=/bin/bash
 #NOW := $(shell date +"%FT%T%z")
 
 # Project name
-NAME := cans
+NAME := cales
 
 TARGET := $(NAME)
 INPUT_FILE := input.nml
