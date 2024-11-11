@@ -9,7 +9,7 @@ module mod_fft
   use, intrinsic :: iso_c_binding, only: C_INT,c_intptr_t
   use mod_common_mpi, only: ierr
   use mod_fftw_param
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
 #if defined(_OPENACC)
   use mod_utils     , only: f_sizeof
 #endif

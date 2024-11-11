@@ -20,7 +20,7 @@ contains
     ! also, -O0 is used to avoid compiler optimization that may change the order of summation
     !
     use mpi
-    use mod_precision
+    use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
     implicit none
     integer , intent(in), dimension(3) :: n
     real(rp), intent(in), dimension(0:) :: grid_vol_ratio
@@ -51,7 +51,7 @@ contains
     isize = storage_size(val)/8
   end function f_sizeof
   subroutine swap(arr1,arr2)
-    use mod_precision, only: rp
+    use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
     implicit none
     real(rp), intent(inout), pointer, contiguous, dimension(:,:,:) :: arr1,arr2
     real(rp),                pointer, contiguous, dimension(:,:,:) :: tmp

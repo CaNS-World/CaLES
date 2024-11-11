@@ -7,7 +7,7 @@
 ! -
 module mod_workspaces
 #if defined(_OPENACC)
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_common_cudecomp, only: work,work_cuda,work_halo,work_halo_cuda
   use mod_utils, only: f_sizeof
   implicit none

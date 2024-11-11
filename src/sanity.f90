@@ -25,7 +25,7 @@ module mod_sanity
 #endif
   use mod_wallmodel    , only: updt_wallmodelbc
   use mod_typedef   , only: bound
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public test_sanity_input

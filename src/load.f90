@@ -11,7 +11,7 @@ module mod_load
 #endif
   use mpi
   use mod_common_mpi, only: myid,ierr
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_utils, only: f_sizeof
   implicit none
   private

@@ -6,7 +6,7 @@
 !
 ! -
 module mod_scal
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public scal,cmpt_scalflux

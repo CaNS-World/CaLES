@@ -8,7 +8,7 @@
 #define _CHANNEL
 module mod_sgs
   use mpi
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_common_mpi, only: ierr
   use mod_param, only: c_smag,big
   use mod_typedef, only: bound

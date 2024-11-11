@@ -9,7 +9,7 @@ module mod_initmpi
   use mpi
   use decomp_2d
   use mod_common_mpi, only: myid,ierr,halo,ipencil => ipencil_axis
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   !@acc use openacc
   !@acc use cudecomp
   !@cuf use cudafor, only: cudaGetDeviceCount,cudaSetDevice

@@ -81,7 +81,7 @@ program cans
 #endif
   use mod_updatep        , only: updatep
   use mod_utils          , only: bulk_mean
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: bound
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
