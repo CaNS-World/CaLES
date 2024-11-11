@@ -10,7 +10,7 @@ module mod_bound
   use mod_common_mpi, only: ierr,halo,ipencil_axis
   use mod_precision
   use mod_typedef   , only: bound
-  use mod_wmodel    , only: updt_wallmodelbc
+  use mod_wallmodel    , only: updt_wallmodelbc
   implicit none
   private
   public boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
@@ -210,7 +210,7 @@ module mod_bound
     real(rp) :: sgn
     integer  :: n,dh,n1,n2
     !
-    n = size(p,idir) - 2*nh
+    n = size(p,idir)-2*nh
     sgn = 1._rp
     if(ctype == 'D'.and.centered) then
       sgn = -1._rp

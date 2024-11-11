@@ -23,7 +23,7 @@ module mod_sanity
 #else
   use mod_solver_gpu, only: solver => solver_gpu
 #endif
-  use mod_wmodel    , only: updt_wallmodelbc
+  use mod_wallmodel    , only: updt_wallmodelbc
   use mod_typedef   , only: bound
   use mod_precision
   implicit none
