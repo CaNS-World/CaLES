@@ -6,7 +6,7 @@
 !
 ! -
 module mod_dist
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_param, only: big
   implicit none
   private

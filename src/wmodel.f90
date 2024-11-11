@@ -8,7 +8,7 @@
 module mod_wmodel
   use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan,is_finite => ieee_is_finite
   use mpi
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef, only: bound
   use mod_param, only: kap_log,b_log,eps
   implicit none

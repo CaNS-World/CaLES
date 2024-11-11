@@ -10,7 +10,7 @@ module mod_solver_gpu
   use, intrinsic :: iso_c_binding, only: C_PTR
   use cudecomp
   use mod_fft  ,  only: signal_processing,fftf_gpu,fftb_gpu
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_common_mpi     , only: ipencil_axis
   use mod_common_cudecomp, only: dtype_rp => cudecomp_real_rp, &
                                  cudecomp_is_t_in_place, &

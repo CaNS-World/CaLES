@@ -9,7 +9,7 @@ module mod_solver
   use, intrinsic :: iso_c_binding, only: C_PTR
   use decomp_2d
   use mod_fft   , only: fft
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public solver

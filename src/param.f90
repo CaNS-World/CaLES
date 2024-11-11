@@ -6,7 +6,7 @@
 !
 ! -
 module mod_param
-use mod_precision
+use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
 !@acc use cudecomp
 implicit none
 public

@@ -9,7 +9,7 @@ module mod_rk
   use mod_mom  , only: mom_xyz_ad,cmpt_wallshear
   use mod_scal , only: scal,cmpt_scalflux
   use mod_utils, only: bulk_mean,swap
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public rk

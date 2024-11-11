@@ -8,7 +8,7 @@
 module mod_mom
   use mpi
   use mod_common_mpi, only: ierr
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public cmpt_wallshear,bulk_forcing,mom_xyz_ad

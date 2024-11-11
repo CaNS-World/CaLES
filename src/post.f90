@@ -6,7 +6,7 @@
 !
 ! -
 module mod_post
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public vorticity,vorticity_one_component,rotation_rate,strain_rate,q_criterion

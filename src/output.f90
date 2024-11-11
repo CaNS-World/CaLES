@@ -9,7 +9,7 @@ module mod_output
   use mpi
   use decomp_2d_io
   use mod_common_mpi, only:ierr,myid
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public out0d,gen_alias,out1d,out1d_chan,out2d,out3d,write_log_output,write_visu_2d,write_visu_3d,out2d_duct

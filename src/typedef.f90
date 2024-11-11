@@ -6,7 +6,7 @@
 !
 ! -
 module mod_typedef
-  use mod_precision
+  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   type bound
   real(rp), allocatable, dimension(:,:,:) :: x
   real(rp), allocatable, dimension(:,:,:) :: y
