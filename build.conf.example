@@ -1,10 +1,10 @@
 #
 # compiler and compiling profile
 #
-FCOMP=NVIDIA        # options: GNU, NVIDIA, INTEL
-FFLAGS_OPT=1        # for production runs
+FCOMP=GNU        # options: GNU, NVIDIA, INTEL
+FFLAGS_OPT=0        # for production runs
 FFLAGS_OPT_MAX=0    # for production runs (more aggressive optimization)
-FFLAGS_DEBUG=0      # for debugging
+FFLAGS_DEBUG=1      # for debugging
 FFLAGS_DEBUG_MAX=0  # for thorough debugging
 #
 # defines
@@ -19,5 +19,5 @@ MASK_DIVERGENCE_CHECK=0
 #
 # GPU-related
 #
-GPU=1
+GPU=0
 USE_NVTX=0                 # use the NVTX-enabled Git branch 'with-nvtx' to see the markers
