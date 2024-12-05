@@ -47,10 +47,10 @@ GD := $(ROOT_DIR)/src/.gen-deps.awk
 CPP := -cpp
 
 # edit build.conf file desired
-include $(ROOT_DIR)/build.conf
-include $(CONFIG_DIR)/compilers.mk
-include $(CONFIG_DIR)/flags.mk
-include $(CONFIG_DIR)/libs.mk
+-include $(ROOT_DIR)/build.conf
+-include $(CONFIG_DIR)/compilers.mk
+-include $(CONFIG_DIR)/flags.mk
+-include $(CONFIG_DIR)/libs.mk
 
 # List of all source files
 SRCS_INC := $(wildcard $(SRCS_DIR)/*-inc.f90 $(SRCS_DIR)/*.h90)
@@ -105,3 +105,17 @@ allclean:
 # rules for building the external libraries (compile with 'make libs'):
 #
 include $(LIBS_DIR)/external.mk
+
+# Rules to generate config files if missing
+$(CONFIG_DIR)/compilers.mk:
+	@echo "Generating $(CONFIG_DIR)/compilers.mk from $(CONFIG_DIR)/compilers.mk.example..."
+	cp $(CONFIG_DIR)/compilers.mk.example $(CONFIG_DIR)/compilers.mk
+$(CONFIG_DIR)/flags.mk:
+	@echo "Generating $(CONFIG_DIR)/flags.mk from $(CONFIG_DIR)/flags.mk.example..."
+	cp $(CONFIG_DIR)/flags.mk.example $(CONFIG_DIR)/flags.mk
+$(CONFIG_DIR)/libs.mk:
+	@echo "Generating $(CONFIG_DIR)/libs.mk from $(CONFIG_DIR)/libs.mk.example..."
+	cp $(CONFIG_DIR)/libs.mk.example $(CONFIG_DIR)/libs.mk
+$(ROOT_DIR)/build.conf:
+	@echo "Generating $(ROOT_DIR)/build.conf from $(ROOT_DIR)/build.conf.example..."
+	cp $(ROOT_DIR)/build.conf.example $(ROOT_DIR)/build.conf
