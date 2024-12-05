@@ -506,7 +506,10 @@ module mod_bound
     real(rp), intent(out), dimension(:,:,0:) :: rhs
     character(len=1), intent(in) :: c_or_f ! c -> cell-centered; f -> face-centered
     real(rp) :: sgn
-    integer :: ibound
+    integer :: ibound,n1,n2
+    !
+    n1 = size(bc,1) - 2
+    n2 = size(bc,2) - 2
     !
     select case(c_or_f)
     case('c')
@@ -518,7 +521,7 @@ module mod_bound
           !$acc end kernels
         case('D')
           !$acc kernels default(present) async(1)
-          rhs(:,:,ibound) = -2._rp*bc(:,:,ibound)/dlc(ibound)/dlf(ibound)
+          rhs(:,:,ibound) = -2._rp*bc(1:n1,1:n2,ibound)/dlc(ibound)/dlf(ibound)
           !$acc end kernels
         case('N')
           if(ibound == 0) then
@@ -527,7 +530,7 @@ module mod_bound
             sgn = -1._rp
           end if
           !$acc kernels default(present) async(1)
-          rhs(:,:,ibound) = sgn*bc(:,:,ibound)/dlf(ibound)
+          rhs(:,:,ibound) = sgn*bc(1:n1,1:n2,ibound)/dlf(ibound)
           !$acc end kernels
         end select
       end do
@@ -540,7 +543,7 @@ module mod_bound
           !$acc end kernels
         case('D')
           !$acc kernels default(present) async(1)
-          rhs(:,:,ibound) = -bc(:,:,ibound)/dlc(ibound)/dlf(ibound)
+          rhs(:,:,ibound) = -bc(1:n1,1:n2,ibound)/dlc(ibound)/dlf(ibound)
           !$acc end kernels
         case('N')
           if(ibound == 0) then
@@ -549,7 +552,7 @@ module mod_bound
             sgn = -1._rp
           end if
           !$acc kernels default(present) async(1)
-          rhs(:,:,ibound) = sgn*bc(:,:,ibound)/dlc(ibound)
+          rhs(:,:,ibound) = sgn*bc(1:n1,1:n2,ibound)/dlc(ibound)
           !$acc end kernels
         end select
       end do
