@@ -374,11 +374,21 @@ program cans
   ! post-process and write initial condition
   !
   write(fldnum,'(i7.7)') istep
-  !$acc update self(u,v,w,p,visct) async(1)
-  !$acc wait(1)
-  include 'out1d.h90'
-  include 'out2d.h90'
-  include 'out3d.h90'
+  if(iout1d > 0.and.mod(istep,max(iout1d,1)) == 0) then
+    !$acc update self(u,v,w,p,visct) async(1)
+    !$acc wait(1)
+    include 'out1d.h90'
+  end if
+  if(iout2d > 0.and.mod(istep,max(iout2d,1)) == 0) then
+    !$acc update self(u,v,w,p,visct) async(1)
+    !$acc wait(1)
+    include 'out2d.h90'
+  end if
+  if(iout3d > 0.and.mod(istep,max(iout3d,1)) == 0) then
+    !$acc update self(u,v,w,p,visct) async(1)
+    !$acc wait(1)
+    include 'out3d.h90'
+  end if
   call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
   dt = min(cfl*dtmax,dtmin)
   if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
@@ -507,7 +517,7 @@ program cans
       tw = (MPI_WTIME()-twi)/3600.
       if(tw    >= tw_max  ) is_done = is_done.or..true.
     end if
-    if(mod(istep,icheck) == 0) then
+    if(icheck > 0.and.mod(istep,max(icheck,1)) == 0) then
       ! set icheck=1 to verify restart
       if(myid == 0) print*, 'Checking stability and divergence...'
       call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
@@ -532,7 +542,7 @@ program cans
     !
     ! output routines below
     !
-    if(mod(istep,iout0d) == 0) then
+    if(iout0d > 0.and.mod(istep,max(iout0d,1)) == 0) then
       var(1) = 1.*istep
       var(2) = dt
       var(3) = time
@@ -559,20 +569,22 @@ program cans
       end if
     end if
     write(fldnum,'(i7.7)') istep
-    if(mod(istep,iout1d) == 0) then
+    if(iout1d > 0.and.mod(istep,max(iout1d,0)) == 0) then
+      !$acc update self(u,v,w,p,visct) async(1)
+      !$acc wait(1)
       include 'out1d.h90'
     end if
-    if(mod(istep,iout2d) == 0) then
+    if(iout2d > 0.and.mod(istep,max(iout2d,1)) == 0) then
       !$acc update self(u,v,w,p,visct) async(1)
       !$acc wait(1)
       include 'out2d.h90'
     end if
-    if(mod(istep,iout3d) == 0) then
+    if(iout3d > 0.and.mod(istep,max(iout3d,1)) == 0) then
       !$acc update self(u,v,w,p,visct) async(1)
       !$acc wait(1)
       include 'out3d.h90'
     end if
-    if(mod(istep,isave ) == 0.or.(is_done.and..not.kill)) then
+    if((isave > 0.and.mod(istep,max(isave,1)) == 0).or.(is_done.and..not.kill)) then
       if(is_overwrite_save) then
         filename = 'fld.bin'
       else
