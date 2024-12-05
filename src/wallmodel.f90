@@ -6,290 +6,476 @@
 !
 ! -
 module mod_wallmodel
-  use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan,is_finite => ieee_is_finite
+  use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan, is_finite => ieee_is_finite
   use mpi
-  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
+  use mod_precision, only: rp, sp, dp, i8, MPI_REAL_RP
   use mod_typedef, only: bound
-  use mod_param, only: kap_log,b_log,eps
+  use mod_param, only: kap_log, b_log, eps
+  use mod_smartredis, only: InitSmartRedis, ExchangeDataSmartRedis
   implicit none
   private
-  public updt_wallmodelbc
+  public :: init_wallmodels, updt_wallmodelbcs
+
+  integer, parameter :: WM_LOG = 1
+  integer, parameter :: WM_LAM = 2
+  integer, parameter :: WM_DRL = 3
+  integer, parameter :: MAX_WALL_MODELS = 10
+
+  type :: WallModelInput
+    real(rp), allocatable :: vel1(:,:)
+    real(rp), allocatable :: vel2(:,:)
+  end type WallModelInput
+
+  type :: WallModelOutput
+    real(rp), allocatable :: tauw1(:,:)
+    real(rp), allocatable :: tauw2(:,:)
+  end type WallModelOutput
+
+  abstract interface
+    subroutine wallmodel_interface(visc, hwm, inputs, outputs)
+      import :: WallModelInput, WallModelOutput
+      import :: rp
+      real(rp), intent(in) :: visc, hwm
+      type(WallModelInput), intent(in) :: inputs
+      type(WallModelOutput), intent(out) :: outputs
+    end subroutine wallmodel_interface
+  end interface
+
+  type :: WallModelProcedure
+    procedure(wallmodel_interface), pointer, nopass :: ptr => null()
+  end type WallModelProcedure
+
+  type(WallModelProcedure) :: wallmodel(MAX_WALL_MODELS)
+
   contains
-    !
-  subroutine updt_wallmodelbc(n,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,h,index_wm,u,v,w, &
-                              bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag)
-    !
-    ! update wall model bc wall by wall
-    ! 
+
+  subroutine updt_wallmodelbcs(n, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, u, v, w, &
+                               bcu, bcv, bcw, bcu_mag, bcv_mag, bcw_mag)
     implicit none
-    integer , intent(in), dimension(3) :: n
-    logical , intent(in), dimension(0:1,3) :: is_bound
-    integer , intent(in), dimension(0:1,3) :: lwm,index_wm
-    real(rp), intent(in), dimension(3) :: l,dl
-    real(rp), intent(in), dimension(0:) :: zc,zf,dzc,dzf
-    real(rp), intent(in) :: visc,h
-    real(rp), intent(in), dimension(0:,0:,0:) :: u,v,w
-    type(bound), intent(inout) :: bcu,bcv,bcw
-    type(bound), intent(in   ) :: bcu_mag,bcv_mag,bcw_mag
-    real(rp) :: wei,coef,uh,vh,wh,u1,u2,v1,v2,w1,w2,u_mag,v_mag,w_mag,tauw(2)
-    integer  :: nh,i,j,k,i1,i2,j1,j2,k1,k2
-    !
+    integer, intent(in), dimension(3) :: n
+    logical, intent(in), dimension(0:1,3) :: is_bound
+    integer, intent(in), dimension(0:1,3) :: lwm
+    real(rp), intent(in), dimension(3) :: l, dl
+    real(rp), intent(in), dimension(0:) :: zc, zf, dzc, dzf
+    real(rp), intent(in) :: visc, hwm
+    real(rp), intent(in), dimension(0:,0:,0:) :: u, v, w
+    type(Bound), intent(inout) :: bcu, bcv, bcw
+    type(Bound), intent(in) :: bcu_mag, bcv_mag, bcw_mag
+    type(WallModelInput) :: inputs
+    type(WallModelOutput) :: outputs
+    logical, save :: is_first = .true.
+    integer, dimension(0:1,3), save :: hwm_index
+    integer :: nh, mtype, idir, ibound, cell_index
+
+    if (is_first) then
+      is_first = .false.
+      call init_wallmodels(n, is_bound, lwm, l, dl, zc, hwm, hwm_index)
+    end if
+
     nh = 1
-    !
-    if(is_bound(0,1).and.lwm(0,1)/=0) then
-      call cmpt_wallmodelbc(n,0,1,nh,lwm(0,1),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(0,1),v,w, &
-                            bcv%x,bcw%x,bcv_mag%x,bcw_mag%x)
+
+    do ibound = 0, 1
+      do idir = 1, 3
+        if (is_bound(ibound, idir) .and. lwm(ibound, idir) /= 0) then
+          mtype = lwm(ibound, idir)
+          cell_index = hwm_index(ibound, idir)
+          call cmpt_wallmodelbc(n, ibound, idir, nh, mtype, l, dl, zc, zf, dzc, dzf, &
+                                visc, hwm, cell_index, u, v, w, bcu, bcv, bcw, bcu_mag, bcv_mag, bcw_mag)
+        end if
+      end do
+    end do
+  end subroutine updt_wallmodelbcs
+
+  ! find the cell_index required for interpolation to the wall model height.
+  ! The stored cell_index corresponds to the cells far from a wall, i.e., i2,j2,k2.
+  ! Remmeber to set hwm strightly higher than the first cell center, and lower
+  ! than the last cell center (hwm=hwm-eps)
+
+  subroutine init_wallmodels(n, is_bound, lwm, l, dl, zc, hwm, hwm_index)
+    implicit none
+    integer, intent(in) :: n(3)
+    logical, intent(in) :: is_bound(0:1,3)
+    integer, intent(in) :: lwm(0:1,3)
+    real(rp), intent(in) :: l(3), dl(3), zc(0:), hwm
+    integer, intent(out) :: hwm_index(0:1,3)
+    integer :: i, j, k, i1, i2, j1, j2, k1, k2
+
+    wallmodel(WM_LOG)%ptr => wallmodel_loglaw
+    wallmodel(WM_LAM)%ptr => wallmodel_laminar
+    wallmodel(WM_DRL)%ptr => wallmodel_DRL
+
+    if(is_bound(0,1).and.lwm(0,1)/=0) then ! to remove if statement
+      i = 1
+      do while((i-0.5)*dl(1) < hwm)
+        i = i + 1
+      end do
+      i2 = i
+      i1 = i - 1
+      hwm_index(0,1) = i2
     end if
     if(is_bound(1,1).and.lwm(1,1)/=0) then
-      call cmpt_wallmodelbc(n,1,1,nh,lwm(1,1),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(1,1),v,w, &
-                            bcv%x,bcw%x,bcv_mag%x,bcw_mag%x)
+      i = n(1)
+      do while((n(1)-i+0.5)*dl(1) < hwm)
+        i = i - 1
+      end do
+      i2 = i
+      i1 = i + 1
+      hwm_index(1,1) = i2
     end if
     if(is_bound(0,2).and.lwm(0,2)/=0) then
-      call cmpt_wallmodelbc(n,0,2,nh,lwm(0,2),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(0,2),u,w, &
-                            bcu%y,bcw%y,bcu_mag%y,bcw_mag%y)
+      j = 1
+      do while((j-0.5)*dl(2) < hwm)
+        j = j + 1
+      end do
+      j2 = j
+      j1 = j - 1
+      hwm_index(0,2) = j2
     end if
     if(is_bound(1,2).and.lwm(1,2)/=0) then
-      call cmpt_wallmodelbc(n,1,2,nh,lwm(1,2),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(1,2),u,w, &
-                            bcu%y,bcw%y,bcu_mag%y,bcw_mag%y)
+      j = n(2)
+      do while((n(2)-j+0.5)*dl(2) < hwm)
+        j = j - 1
+      end do
+      j2 = j
+      j1 = j + 1
+      hwm_index(1,2) = j2
     end if
     if(is_bound(0,3).and.lwm(0,3)/=0) then
-      call cmpt_wallmodelbc(n,0,3,nh,lwm(0,3),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(0,3),u,v, &
-                            bcu%z,bcv%z,bcu_mag%z,bcv_mag%z)
+      k = 1
+      do while(zc(k) < hwm)
+        k = k + 1
+      end do
+      k2 = k
+      k1 = k - 1
+      hwm_index(0,3) = k2
     end if
     if(is_bound(1,3).and.lwm(1,3)/=0) then
-      call cmpt_wallmodelbc(n,1,3,nh,lwm(1,3),l,dl,zc,zf,dzc,dzf,visc,h,index_wm(1,3),u,v, &
-                            bcu%z,bcv%z,bcu_mag%z,bcv_mag%z)
+      k = n(3)
+      do while(l(3)-zc(k) < hwm)
+        k = k - 1
+      end do
+      k2 = k
+      k1 = k + 1
+      hwm_index(1,3) = k2
     end if
-  end subroutine updt_wallmodelbc
-  !
-  subroutine cmpt_wallmodelbc(n,ibound,idir,nh,mtype,l,dl,zc,zf,dzc,dzf,visc,h,index,vel1,vel2, &
-                              bcvel1,bcvel2,bcvel1_mag,bcvel2_mag)
-    !
-    ! compute wall model bc of a wall
-    !
-    ! wall-parallel velocity at ghost cells is used only for computing the viscous terms,
-    ! including its left- and right-hand sides. It is not used for convective terms, or
-    ! the correction procedure. In WMLES, a wall is a no-slip wall with corrected wall stress.
-    ! When wall stress is required for computing viscous terms, the wall is regarded as a
-    ! Neumann bc. When wall velocity is required for computing work, it is regarded as a
-    ! no-slip wall. When filtering/strain rate is required for computing eddy viscosity,
-    ! the wall is a slip wall, with the wall velocity extrapolated from the interior. Hence,
-    ! a ghost point can have three different values.
-    !
-    ! index 0 must be calculated for the right/front/top walls (chkdt), but not necessary
-    ! for the opposite walls. However, index 0 for the left/back/bottom walls is necessary
-    ! when a subgrid model is involved (cmpt_dw_plus). Hence, the best practice is to
-    ! include index 0.
-    !
-    ! The singularity at the corner for cavity flow affects the calculation of time step.
-    ! However, the velocity is small at the corner, so it does not impose a limitation on
-    ! the time step. Hence, no special treatment is necessary at the corner.
-    ! The ghost point outside of the singularity is essentially not used for computing
-    ! u and w at the corners, since u and w at the corners are set as zero by the
-    ! no-penetration boundary condition. When eddy viscosity (strain rate) is used,
-    ! its calculation uses the ghost point outside of the singularity. However,
-    ! when wall model is used, one-sided difference is used in the calculation of
-    ! of wall gradients (strain rate), so the ghost point outside of the singularity is
-    ! not used. If van Driest damping is used, the ghost point outside of the singularity
-    ! is used, but the damping is not important at the corner. In summary,
-    ! WMLES: the van Driest damping and time step calculation use the ghost point
-    ! outside of the singularity.
-    ! WRLES: the van Driest damping, time step calculation and strain rate calculation
-    ! use the ghost point outside of the singularity.
-    ! DNS: time step calculation uses the ghost point outside of the singularity.
-    !
+  end subroutine init_wallmodels
+
+  subroutine cmpt_wallmodelbc(n, ibound, idir, nh, mtype, l, dl, zc, zf, dzc, dzf, visc, hwm, cell_index, &
+                              u, v, w, bcu, bcv, bcw, bcu_mag, bcv_mag, bcw_mag)
     implicit none
-    integer , intent(in), dimension(3) :: n
-    integer , intent(in) :: ibound,idir,nh,mtype
-    real(rp), intent(in), dimension(3) :: l,dl
-    real(rp), intent(in), dimension(0:) :: zc,zf,dzc,dzf
-    real(rp), intent(in) :: visc,h
-    integer , intent(in) :: index
-    real(rp), intent(in), dimension(0:,0:,0:), target :: vel1,vel2
-    real(rp), intent(inout), dimension(1-nh:,1-nh:,0:), target :: bcvel1,bcvel2
-    real(rp), intent(in), dimension(1-nh:,1-nh:,0:), target :: bcvel1_mag,bcvel2_mag
-    real(rp), allocatable, dimension(:,:), target :: vel1h,vel2h,tauw1,tauw2
-    real(rp), pointer, dimension(:,:,:) :: u,v,w
-    real(rp), pointer, dimension(:,:,:) :: bcu,bcv,bcw
-    real(rp), pointer, dimension(:,:,:) :: bcu_mag,bcv_mag,bcw_mag
-    real(rp), pointer, dimension(:,:) :: uh,vh,wh
-    real(rp) :: sgn,wei,coef,u1,u2,v1,v2,w1,w2,u_mag,v_mag,w_mag,tauw(2),visci
-    integer  :: i,j,k,i1,i2,j1,j2,k1,k2
-    !
+    integer, intent(in) :: n(3), ibound, idir, nh, mtype
+    real(rp), intent(in) :: l(3), dl(3)
+    real(rp), intent(in), dimension(0:) :: zc, zf, dzc, dzf
+    real(rp), intent(in) :: visc, hwm
+    integer, intent(in) :: cell_index
+    real(rp), intent(in), dimension(0:,0:,0:) :: u, v, w
+    type(Bound), intent(inout) :: bcu, bcv, bcw
+    type(Bound), intent(in) :: bcu_mag, bcv_mag, bcw_mag
+    type(WallModelInput) :: inputs
+    type(WallModelOutput) :: outputs
+
+    call prepare_wallmodel_input(n, idir, ibound, cell_index, 1, l, dl, zc, zf, dzc, dzf, &
+                                 visc, hwm, u, v, w, bcu_mag, bcv_mag, bcw_mag, inputs)
+    call wallmodel(mtype)%ptr(visc, hwm, inputs, outputs)
+    call assign_wallmodelbc(idir, ibound, 1, visc, outputs, bcu, bcv, bcw)
+
+    call prepare_wallmodel_input(n, idir, ibound, cell_index, 2, l, dl, zc, zf, dzc, dzf, &
+                                 visc, hwm, u, v, w, bcu_mag, bcv_mag, bcw_mag, inputs)
+    call wallmodel(mtype)%ptr(visc, hwm, inputs, outputs)
+    call assign_wallmodelbc(idir, ibound, 2, visc, outputs, bcu, bcv, bcw)
+
+  end subroutine cmpt_wallmodelbc
+
+  subroutine prepare_wallmodel_input(n, idir, ibound, cell_index, ivel, l, dl, zc, zf, dzc, dzf, &
+                     visc, hwm, u, v, w, bcu_mag, bcv_mag, bcw_mag, inputs)
+    implicit none
+    integer, intent(in) :: n(3), idir, ibound, cell_index, ivel
+    real(rp), intent(in) :: l(3), dl(3)
+    real(rp), intent(in), dimension(0:) :: zc, zf, dzc, dzf
+    real(rp), intent(in) :: visc, hwm
+    real(rp), intent(in), dimension(0:,0:,0:) :: u, v, w
+    type(Bound), intent(in) :: bcu_mag, bcv_mag, bcw_mag
+    type(WallModelInput), intent(out) :: inputs
+    integer :: i, j, k
+    integer :: i1, i2, j1, j2, k1, k2
+    real(rp) :: coef, wei
+    real(rp) :: u1, u2, v1, v2, w1, w2
+    real(rp) :: u_mag, v_mag, w_mag
+
+    if (allocated(inputs%vel1)) deallocate(inputs%vel1)
+    if (allocated(inputs%vel2)) deallocate(inputs%vel2)
+
+    select case(idir)
+    case(1)  ! x-direction walls: vel1 = v, vel2 = w
+      allocate(inputs%vel1(0:n(2)+1, 0:n(3)+1))
+      allocate(inputs%vel2(0:n(2)+1, 0:n(3)+1))
+      inputs%vel1 = 0._rp  ! unused elements have zero value
+      inputs%vel2 = 0._rp
+      if (ibound == 0) then
+        i2 = cell_index
+        i1 = cell_index - 1
+        coef = (hwm - (i1 - 0.5_rp) * dl(1)) / dl(1)
+      else
+        i2 = cell_index
+        i1 = cell_index + 1
+        coef = (hwm - (n(1) - i1 + 0.5_rp) * dl(1)) / dl(1)
+      end if
+      if (ivel == 1) then
+        do k = 1, n(3)
+          do j = 0, n(2)
+            v1 = v(i1, j, k)
+            v2 = v(i2, j, k)
+            w1 = 0.25_rp * (w(i1, j, k) + w(i1, j+1, k) + w(i1, j, k-1) + w(i1, j+1, k-1))
+            w2 = 0.25_rp * (w(i2, j, k) + w(i2, j+1, k) + w(i2, j, k-1) + w(i2, j+1, k-1))
+            v_mag = bcv_mag%x(j, k, ibound)
+            w_mag = 0.25_rp * (bcw_mag%x(j, k  , ibound) + bcw_mag%x(j+1, k  , ibound) + &
+                               bcw_mag%x(j, k-1, ibound) + bcw_mag%x(j+1, k-1, ibound))
+            inputs%vel1(j, k) = vel_relative(v1, v2, coef, v_mag)
+            inputs%vel2(j, k) = vel_relative(w1, w2, coef, w_mag)
+          end do
+        end do
+      else
+        do k = 0, n(3)
+          do j = 1, n(2)
+            wei = (zf(k) - zc(k)) / dzc(k)
+            v1 = 0.5_rp * ((1._rp - wei) * (v(i1, j-1, k  ) + v(i1, j, k  )) + &
+                                    wei  * (v(i1, j-1, k+1) + v(i1, j, k+1)))
+            v2 = 0.5_rp * ((1._rp - wei) * (v(i2, j-1, k  ) + v(i2, j, k  )) + &
+                                    wei  * (v(i2, j-1, k+1) + v(i2, j, k+1)))
+            w1 = w(i1, j, k)
+            w2 = w(i2, j, k)
+            v_mag = 0.5_rp * ((1._rp - wei) * (bcv_mag%x(j-1, k  , ibound) + bcv_mag%x(j, k  , ibound)) + &
+                                       wei  * (bcv_mag%x(j-1, k+1, ibound) + bcv_mag%x(j, k+1, ibound)))
+            w_mag = bcw_mag%x(j, k, ibound)
+            inputs%vel1(j, k) = vel_relative(v1, v2, coef, v_mag)
+            inputs%vel2(j, k) = vel_relative(w1, w2, coef, w_mag)
+          end do
+        end do
+      end if
+    case(2)  ! y-direction walls: vel1 = u, vel2 = w
+      allocate(inputs%vel1(0:n(1)+1, 0:n(3)+1))
+      allocate(inputs%vel2(0:n(1)+1, 0:n(3)+1))
+      inputs%vel1 = 0._rp
+      inputs%vel2 = 0._rp
+      if (ibound == 0) then
+        j2 = cell_index
+        j1 = cell_index - 1
+        coef = (hwm - (j1 - 0.5_rp) * dl(2)) / dl(2)
+      else
+        j2 = cell_index
+        j1 = cell_index + 1
+        coef = (hwm - (n(2) - j1 + 0.5_rp) * dl(2)) / dl(2)
+      end if
+      if (ivel == 1) then
+        do k = 1, n(3)
+          do i = 0, n(1)
+            u1 = u(i, j1, k)
+            u2 = u(i, j2, k)
+            w1 = 0.25_rp * (w(i, j1, k) + w(i+1, j1, k) + w(i, j1, k-1) + w(i+1, j1, k-1))
+            w2 = 0.25_rp * (w(i, j2, k) + w(i+1, j2, k) + w(i, j2, k-1) + w(i+1, j2, k-1))
+            u_mag = bcu_mag%y(i, k, ibound)
+            w_mag = 0.25_rp * (bcw_mag%y(i, k  , ibound) + bcw_mag%y(i+1, k  , ibound) + &
+                               bcw_mag%y(i, k-1, ibound) + bcw_mag%y(i+1, k-1, ibound))
+            inputs%vel1(i, k) = vel_relative(u1, u2, coef, u_mag)
+            inputs%vel2(i, k) = vel_relative(w1, w2, coef, w_mag)
+          end do
+        end do
+      else
+        do k = 0, n(3)
+          do i = 1, n(1)
+            wei = (zf(k) - zc(k)) / dzc(k)
+            u1 = 0.5_rp * ((1._rp - wei) * (u(i-1, j1, k  ) + u(i, j1, k  )) + &
+                                    wei  * (u(i-1, j1, k+1) + u(i, j1, k+1)))
+            u2 = 0.5_rp * ((1._rp - wei) * (u(i-1, j2, k  ) + u(i, j2, k  )) + &
+                                    wei  * (u(i-1, j2, k+1) + u(i, j2, k+1)))
+            w1 = w(i, j1, k)
+            w2 = w(i, j2, k)
+            u_mag = 0.5_rp * ((1._rp - wei) * (bcu_mag%y(i-1, k  , ibound) + bcu_mag%y(i, k  , ibound)) + &
+                                       wei  * (bcu_mag%y(i-1, k+1, ibound) + bcu_mag%y(i, k+1, ibound)))
+            w_mag = bcw_mag%y(i, k, ibound)
+            inputs%vel1(i, k) = vel_relative(u1, u2, coef, u_mag)
+            inputs%vel2(i, k) = vel_relative(w1, w2, coef, w_mag)
+          end do
+        end do
+      end if
+    case(3)  ! z-direction walls: vel1 = u, vel2 = v
+      allocate(inputs%vel1(0:n(1)+1, 0:n(2)+1))
+      allocate(inputs%vel2(0:n(1)+1, 0:n(2)+1))
+      inputs%vel1 = 0._rp
+      inputs%vel2 = 0._rp
+      if (ibound == 0) then
+        k2 = cell_index
+        k1 = cell_index - 1
+        coef = (hwm - zc(k1)) / dzc(k1)
+      else
+        k2 = cell_index
+        k1 = cell_index + 1
+        coef = (hwm - (l(3) - zc(k1))) / dzc(k2)
+      end if
+      if (ivel == 1) then
+        do j = 1, n(2)
+          do i = 0, n(1)
+            u1 = u(i, j, k1)
+            u2 = u(i, j, k2)
+            v1 = 0.25_rp * (v(i, j, k1) + v(i+1, j, k1) + v(i, j-1, k1) + v(i+1, j-1, k1))
+            v2 = 0.25_rp * (v(i, j, k2) + v(i+1, j, k2) + v(i, j-1, k2) + v(i+1, j-1, k2))
+            u_mag = bcu_mag%z(i, j, ibound)
+            v_mag = 0.25_rp * (bcv_mag%z(i, j  , ibound) + bcv_mag%z(i+1, j  , ibound) + &
+                               bcv_mag%z(i, j-1, ibound) + bcv_mag%z(i+1, j-1, ibound))
+            inputs%vel1(i, j) = vel_relative(u1, u2, coef, u_mag)
+            inputs%vel2(i, j) = vel_relative(v1, v2, coef, v_mag)
+          end do
+        end do
+      else
+        do j = 0, n(2)
+          do i = 1, n(1)
+            u1 = 0.25_rp * (u(i-1, j, k1) + u(i, j, k1) + u(i-1, j+1, k1) + u(i, j+1, k1))
+            u2 = 0.25_rp * (u(i-1, j, k2) + u(i, j, k2) + u(i-1, j+1, k2) + u(i, j+1, k2))
+            v1 = v(i, j, k1)
+            v2 = v(i, j, k2)
+            u_mag = 0.25_rp * (bcu_mag%z(i-1, j  , ibound) + bcu_mag%z(i, j  , ibound) + &
+                               bcu_mag%z(i-1, j+1, ibound) + bcu_mag%z(i, j+1, ibound))
+            v_mag = bcv_mag%z(i, j, ibound)
+            inputs%vel1(i, j) = vel_relative(u1, u2, coef, u_mag)
+            inputs%vel2(i, j) = vel_relative(v1, v2, coef, v_mag)
+          end do
+        end do
+      end if
+    end select
+    ! Compute gradients if required by certain wall models
+    ! Placeholder: Implement gradient computations as needed
+    ! For example:
+    ! if (some_condition_for_gradients) then
+    !   allocate(inputs%grad_u(...))
+    !   ... compute gradients ...
+    ! end if
+  end subroutine prepare_wallmodel_input
+  
+  subroutine assign_wallmodelbc(idir, ibound, ivel, visc, outputs, bcu, bcv, bcw)
+    implicit none
+    integer, intent(in) :: idir, ibound, ivel
+    real(rp), intent(in) :: visc
+    type(WallModelOutput), intent(in) :: outputs
+    type(Bound), intent(inout) :: bcu, bcv, bcw
+    real(rp) :: visci, sgn
+    
     visci = 1._rp/visc
-    !
-    n1 = size(bcvel1,1)-2*nh
-    n2 = size(bcvel1,2)-2*nh
-    allocate(vel1h(1-nh:n1+nh,1-nh:n2+nh))
-    allocate(vel2h(1-nh:n1+nh,1-nh:n2+nh))
-    allocate(tauw1(1-nh:n1+nh,1-nh:n2+nh))
-    allocate(tauw2(1-nh:n1+nh,1-nh:n2+nh))
-    !
+
+    if (ibound == 0) then
+      sgn = 1._rp
+    else
+      sgn = -1._rp
+    end if
+    
     select case(idir)
     case(1)
-      if(ibound==0) then
-        i2 = index
-        i1 = index-1
-        coef = (h-(i1-0.5_rp)*dl(1))/dl(1)
-        sgn = 1._rp
+      if (ivel == 1) then
+        bcv%x(:,:,ibound) = sgn*visci*outputs%tauw1
       else
-        i2 = index
-        i1 = index+1
-        coef = (h-(n(1)-i1+0.5_rp)*dl(1))/dl(1)
-        sgn = -1._rp
+        bcw%x(:,:,ibound) = sgn*visci*outputs%tauw2
       end if
-      v       => vel1
-      w       => vel2
-      bcv     => bcvel1
-      bcw     => bcvel2
-      bcv_mag => bcvel1_mag
-      bcw_mag => bcvel2_mag
-      tauw_v  => tauw1
-      tauw_w  => tauw2
-      !$acc parallel loop collapse(2) default(present)  private(v1,v2,w1,w2,v_mag,w_mag,vh,wh,tauw) async(1)
-      do k = 1,n(3)
-        do j = 0,n(2)
-          v1    = v(i1,j,k)
-          v2    = v(i2,j,k)
-          w1    = 0.25_rp*(w(i1,j,k) + w(i1,j+1,k) + w(i1,j,k-1) + w(i1,j+1,k-1))
-          w2    = 0.25_rp*(w(i2,j,k) + w(i2,j+1,k) + w(i2,j,k-1) + w(i2,j+1,k-1))
-          v_mag = bcv_mag(j,k,ibound)
-          w_mag = 0.25_rp*(bcw_mag(j,k  ,ibound) + bcw_mag(j+1,k  ,ibound) + &
-                           bcw_mag(j,k-1,ibound) + bcw_mag(j+1,k-1,ibound))
-          vh    = vel_relative(v1,v2,coef,v_mag)
-          wh    = vel_relative(w1,w2,coef,w_mag)
-        end do
-      end do
-      call wallmodel(mtype,[0,n(2)],[1,n(3)],vh,wh,h,visc,tauw_v,tauw_w)
-      bcv(:,:,ibound) = sgn*visci*tauw_v
-      !$acc parallel loop collapse(2) default(present)  private(v1,v2,w1,w2,v_mag,w_mag,vh,wh,tauw,wei) async(1)
-      do k = 0,n(3)
-        do j = 1,n(2)
-          wei   = (zf(k)-zc(k))/dzc(k)
-          v1    = 0.5_rp*((1._rp-wei)*(v(i1,j-1,k) + v(i1,j,k)) + wei*(v(i1,j-1,k+1) + v(i1,j,k+1)))
-          v2    = 0.5_rp*((1._rp-wei)*(v(i2,j-1,k) + v(i2,j,k)) + wei*(v(i2,j-1,k+1) + v(i2,j,k+1)))
-          w1    = w(i1,j,k)
-          w2    = w(i2,j,k)
-          v_mag = 0.5_rp*((1._rp-wei)*(bcv_mag(j-1,k  ,ibound) + bcv_mag(j,k  ,ibound)) + &
-                                 wei *(bcv_mag(j-1,k+1,ibound) + bcv_mag(j,k+1,ibound)))
-          w_mag = bcw_mag(j,k,ibound)
-          vh    = vel_relative(v1,v2,coef,v_mag)
-          wh    = vel_relative(w1,w2,coef,w_mag)
-        end do
-      end do
-      call wallmodel(mtype,[1,n(2)],[0,n(3)],vh,wh,h,visc,tauw_v,tauw_w)
-      bcw(:,:,ibound) = sgn*visci*tauw_w
     case(2)
-      if(ibound==0) then
-        j2 = index
-        j1 = index-1
-        coef = (h-(j1-0.5)*dl(2))/dl(2)
-        sgn = 1._rp
+      if (ivel == 1) then
+        bcu%y(:,:,ibound) = sgn*visci*outputs%tauw1
       else
-        j2 = index
-        j1 = index+1
-        coef = (h-(n(2)-j1+0.5)*dl(2))/dl(2)
-        sgn = -1._rp
+        bcw%y(:,:,ibound) = sgn*visci*outputs%tauw2
       end if
-      u       => vel1
-      w       => vel2
-      bcu     => bcvel1
-      bcw     => bcvel2
-      bcu_mag => bcvel1_mag
-      bcw_mag => bcvel2_mag
-      tauw_u  => tauw1
-      tauw_w  => tauw2
-      !$acc parallel loop collapse(2) default(present)  private(u1,u2,w1,w2,u_mag,w_mag,uh,wh,tauw) async(1)
-      do k = 1,n(3)
-        do i = 0,n(1)
-          u1    = u(i,j1,k)
-          u2    = u(i,j2,k)
-          w1    = 0.25_rp*(w(i,j1,k) + w(i+1,j1,k) + w(i,j1,k-1) + w(i+1,j1,k-1))
-          w2    = 0.25_rp*(w(i,j2,k) + w(i+1,j2,k) + w(i,j2,k-1) + w(i+1,j2,k-1))
-          u_mag = bcu_mag(i,k,ibound)
-          w_mag = 0.25_rp*(bcw_mag(i,k  ,ibound) + bcw_mag(i+1,k  ,ibound) + &
-                           bcw_mag(i,k-1,ibound) + bcw_mag(i+1,k-1,ibound))
-          uh    = vel_relative(u1,u2,coef,u_mag)
-          wh    = vel_relative(w1,w2,coef,w_mag)
-        end do
-      end do
-      call wallmodel(mtype,[0,n(1)],[1,n(3)],uh,wh,h,visc,tauw_u,tauw_w)
-      bcu(:,:,ibound) = sgn*visci*tauw_u
-      !$acc parallel loop collapse(2) default(present)  private(u1,u2,w1,w2,u_mag,w_mag,uh,wh,tauw,wei) async(1)
-      do k = 0,n(3)
-        do i = 1,n(1)
-          wei   = (zf(k)-zc(k))/dzc(k)
-          u1    = 0.5_rp*((1._rp-wei)*(u(i-1,j1,k) + u(i,j1,k)) + wei*(u(i-1,j1,k+1) + u(i,j1,k+1)))
-          u2    = 0.5_rp*((1._rp-wei)*(u(i-1,j2,k) + u(i,j2,k)) + wei*(u(i-1,j2,k+1) + u(i,j2,k+1)))
-          w1    = w(i,j1,k)
-          w2    = w(i,j2,k)
-          u_mag = 0.5_rp*((1._rp-wei)*(bcu_mag(i-1,k  ,ibound) + bcu_mag(i,k  ,ibound)) + &
-                                 wei *(bcu_mag(i-1,k+1,ibound) + bcu_mag(i,k+1,ibound)))
-          w_mag = bcw_mag(i,k,ibound)
-          uh    = vel_relative(u1,u2,coef,u_mag)
-          wh    = vel_relative(w1,w2,coef,w_mag)
-        end do
-      end do
-      call wallmodel(mtype,[1,n(1)],[0,n(3)],uh,wh,h,visc,tauw_u,tauw_w)
-      bcw(:,:,ibound) = sgn*visci*tauw_w
     case(3)
-      if(ibound==0) then
-        k2 = index
-        k1 = index-1
-        coef = (h-zc(k1))/dzc(k1)
-        sgn = 1._rp
+      if (ivel == 1) then
+        bcu%z(:,:,ibound) = sgn*visci*outputs%tauw1
       else
-        k2 = index
-        k1 = index+1
-        coef = (h-(l(3)-zc(k1)))/(dzc(k2))
-        sgn = -1._rp
+        bcv%z(:,:,ibound) = sgn*visci*outputs%tauw2
       end if
-      u       => vel1
-      v       => vel2
-      uh      => vel1h
-      vh      => vel2h
-      bcu     => bcvel1
-      bcv     => bcvel2
-      bcu_mag => bcvel1_mag
-      bcv_mag => bcvel2_mag
-      tauw_u  => tauw1
-      tauw_v  => tauw2
-      !$acc parallel loop collapse(2) default(present)  private(u1,u2,v1,v2,u_mag,v_mag,uh,vh,tauw) async(1)
-      do j = 1,n(2)
-        do i = 0,n(1)
-          u1    = u(i,j,k1)
-          u2    = u(i,j,k2)
-          v1    = 0.25_rp*(v(i,j,k1) + v(i+1,j,k1) + v(i,j-1,k1) + v(i+1,j-1,k1))
-          v2    = 0.25_rp*(v(i,j,k2) + v(i+1,j,k2) + v(i,j-1,k2) + v(i+1,j-1,k2))
-          u_mag = bcu_mag(i,j,ibound)
-          v_mag = 0.25_rp*(bcv_mag(i,j  ,ibound) + bcv_mag(i+1,j  ,ibound) + &
-                           bcv_mag(i,j-1,ibound) + bcv_mag(i+1,j-1,ibound))
-          uh(i,j) = vel_relative(u1,u2,coef,u_mag)
-          vh(i,j) = vel_relative(v1,v2,coef,v_mag)
-          ! states
-        end do
-      end do
-      call wallmodel(mtype,[0,n(1)],[1,n(2)],uh,vh,h,visc,tauw_u,tauw_v)
-      bcu(:,:,ibound) = sgn*visci*tauw_u
-      !$acc parallel loop collapse(2) default(present)  private(u1,u2,v1,v2,u_mag,v_mag,uh,vh,tauw) async(1)
-      do j = 0,n(2)
-        do i = 1,n(1)
-          u1    = 0.25_rp*(u(i-1,j,k1) + u(i,j,k1) + u(i-1,j+1,k1) + u(i,j+1,k1))
-          u2    = 0.25_rp*(u(i-1,j,k2) + u(i,j,k2) + u(i-1,j+1,k2) + u(i,j+1,k2))
-          v1    = v(i,j,k1)
-          v2    = v(i,j,k2)
-          u_mag = 0.25_rp*(bcu_mag(i-1,j  ,ibound) + bcu_mag(i,j  ,ibound) + &
-                           bcu_mag(i-1,j+1,ibound) + bcu_mag(i,j+1,ibound))
-          v_mag = bcv_mag(i,j,ibound)
-          uh(i,j) = vel_relative(u1,u2,coef,u_mag)
-          vh(i,j) = vel_relative(v1,v2,coef,v_mag)
-        end do
-      end do
-      call wallmodel(mtype,[1,n(1)],[0,n(2)],uh,vh,h,visc,tauw_u,tauw_v)
-      bcv(:,:,ibound) = sgn*visci*tauw_v
     end select
-  end subroutine cmpt_wallmodelbc
-  !
+  end subroutine assign_wallmodelbc
+
+  subroutine wallmodel_DRL(visc, hwm, inputs, outputs)
+    real(rp), intent(in) :: visc, hwm
+    type(WallModelInput), intent(in) :: inputs
+    type(WallModelOutput), intent(out) :: outputs
+    integer :: n1, n2, i, j
+    real(rp) :: upar, utau, conv, utau_old, f, fp, tauw_tot
+    logical, save :: is_first = .true.
+
+    n1 = size(inputs%vel1, 1) - 2
+    n2 = size(inputs%vel1, 2) - 2
+
+    allocate(outputs%tauw1(0:n1+1, 0:n2+1))
+    allocate(outputs%tauw2(0:n1+1, 0:n2+1))
+    outputs%tauw1 = 0._rp
+    outputs%tauw2 = 0._rp
+
+    if (is_first) then
+      is_first = .false.
+      call InitSmartRedis()
+    end if
+    CALL ExchangeDataSmartRedis(inputs%vel1, inputs%vel2, outputs%tauw1, outputs%tauw2)
+
+  end subroutine wallmodel_DRL
+  
+  subroutine wallmodel_loglaw(visc, hwm, inputs, outputs)
+    real(rp), intent(in) :: visc, hwm
+    type(WallModelInput), intent(in) :: inputs
+    type(WallModelOutput), intent(out) :: outputs
+    integer :: n1, n2, i, j
+    real(rp) :: upar, utau, conv, utau_old, f, fp, tauw_tot
+
+    n1 = size(inputs%vel1, 1) - 2
+    n2 = size(inputs%vel1, 2) - 2
+
+    allocate(outputs%tauw1(0:n1+1, 0:n2+1))
+    allocate(outputs%tauw2(0:n1+1, 0:n2+1))
+    outputs%tauw1 = 0._rp
+    outputs%tauw2 = 0._rp
+
+    do j = 0, n2+1
+      do i = 0, n1+1
+        upar = sqrt(inputs%vel1(i,j)**2 + inputs%vel2(i,j)**2)
+        utau = max(sqrt(upar/hwm*visc), visc/hwm*exp(-kap_log*b_log))
+        conv = 1._rp
+        do while(conv > 0.5e-4_rp)
+          utau_old = utau
+          f = upar/utau - 1._rp/kap_log*log(hwm*utau/visc) - b_log
+          fp = -1._rp/utau*(upar/utau + 1._rp/kap_log)
+          utau = abs(utau - f / fp)
+          conv = abs(utau / utau_old - 1._rp)
+        end do
+        tauw_tot = utau**2
+        outputs%tauw1(i,j) = tauw_tot * inputs%vel1(i,j) / (upar + eps)
+        outputs%tauw2(i,j) = tauw_tot * inputs%vel2(i,j) / (upar + eps)
+      end do
+    end do
+  end subroutine wallmodel_loglaw
+
+  subroutine wallmodel_laminar(visc, hwm, inputs, outputs)
+    real(rp), intent(in) :: visc, hwm
+    type(WallModelInput), intent(in) :: inputs
+    type(WallModelOutput), intent(out) :: outputs
+    integer :: i, j
+    real(rp) :: upar, umax, del, tauw_tot
+    integer :: n1, n2
+
+    n1 = size(inputs%vel1, 1) - 2
+    n2 = size(inputs%vel1, 2) - 2
+
+    allocate(outputs%tauw1(0:n1+1, 0:n2+1))
+    allocate(outputs%tauw2(0:n1+1, 0:n2+1))
+    outputs%tauw1 = 0._rp
+    outputs%tauw2 = 0._rp
+
+    del = 1._rp
+
+    do j = 0, n2+1
+      do i = 0, n1+1
+        upar = sqrt(inputs%vel1(i,j)**2 + inputs%vel2(i,j)**2)
+        umax = upar / (hwm / del * (2._rp - hwm / del))
+        tauw_tot = 2._rp / del * umax * visc
+        outputs%tauw1(i,j) = tauw_tot * inputs%vel1(i,j) / (upar + eps)
+        outputs%tauw2(i,j) = tauw_tot * inputs%vel2(i,j) / (upar + eps)
+      end do
+    end do
+  end subroutine wallmodel_laminar
+
   function vel_relative(v1,v2,coef,bcv_mag)
     !
     ! compute relative velocity to a wall
@@ -302,61 +488,5 @@ module mod_wallmodel
     vel_relative = (1._rp-coef)*v1 + coef*v2
     vel_relative = vel_relative - bcv_mag
   end function vel_relative
-  !
-  subroutine wallmodel(mtype,i0,imax,j0,jmax,uh,vh,h,visc,tauw_u,tauw_v)
-    !
-    ! Newton-Raphson, 3~7 iters. It is bad to initialize with an assumed linear profile
-    ! below the first cell center, because its slope is quite uncertain due to the
-    ! erroneous velocity at the first cell center. We do not save tauw_tot from previous
-    ! step, so those values are not directly available. At zero velocity,
-    ! utau=visc/h*exp(-kap_log*b_log). It is necessary to use abs to avoid negative values
-    ! of utau. Note that arrays (u/v/w) are initialized as zero (ghost points), which
-    ! makes a reasonable guess at end points. The convergence criterion is
-    ! |tauw/tauw_old-1.0|<1.0e-4, corresponding to |utau/utau_old-1.0|<0.5e-4.
-    ! For a channel, it is efficient to use the computed utau available at the nearest
-    ! grid point, which helps reduce ~50% of the iterations. However, "if" statements
-    ! must be introduced at special points in square duct/cavity.
-    !
-    implicit none
-    integer, parameter :: WM_LAM = -1, &
-                          WM_LOG =  1
-    integer, intent(in)  :: mtype
-    integer, intent(in)  :: i0,imax,j0,jmax
-    real(rp), intent(in) :: uh,vh,h,visc
-    real(rp), intent(out), dimension(0:,0:) :: tauw_u,tauw_v
-    real(rp) :: upar,utau,f,fp,conv,utau_old,tauw_tot
-    real(rp) :: umax,del
-    !
-    select case(mtype)
-    case(WM_LOG)
-      do j = j0,jmax
-        do i = i0,imax
-          upar = sqrt(uh(i,j)*uh(i,j)+vh(i,j)*vh(i,j))
-          utau = max(sqrt(upar/h*visc),visc/h*exp(-kap_log*b_log))
-          conv = 1._rp
-          do while(conv>0.5e-4_rp)
-            utau_old = utau
-            f  = upar/utau-1._rp/kap_log*log(h*utau/visc)-b_log
-            fp = -1._rp/utau*(upar/utau+1._rp/kap_log)
-            utau = abs(utau-f/fp)
-            conv = abs(utau/utau_old-1._rp)
-          end do
-          tauw_tot = utau*utau
-          tauw_u(i,j) = tauw_tot*uh/(upar+eps)
-          tauw_v(i,j) = tauw_tot*vh/(upar+eps)
-        end do
-      end do
-    case(WM_LAM)
-      do j = j0,jmax
-        do i = i0,imax
-          upar = sqrt(uh(i,j)*uh(i,j)+vh(i,j)*vh(i,j))
-          del  = 1.0_rp ! 1.0 is channel half height
-          umax = upar/(h/del*(2._rp-h/del))
-          tauw_tot = 2._rp/del*umax*visc
-          tauw_u(i,j) = tauw_tot*uh/(upar+eps)
-          tauw_v(i,j) = tauw_tot*vh/(upar+eps)
-        end do
-      end do
-    end select
-  end subroutine wallmodel
+
 end module mod_wallmodel

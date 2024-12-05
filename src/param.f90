@@ -71,7 +71,6 @@ real(rp), protected :: dx,dy
 character(len=100), protected :: sgstype
 integer, protected, dimension(0:1,3) :: lwm
 real(rp), protected :: hwm
-integer, dimension(0:1,3) :: index_wm
 #if defined(_OPENACC)
 !
 ! cuDecomp input parameters
@@ -119,7 +118,7 @@ contains
       if(ierr == 0) then
         read(iunit,nml=dns,iostat=ierr)
       else
-        if(myid == 0) print*, 'Error reading the input file'
+        if(myid == 0) print*, 'Error opening the input file, nml = dns'
         if(myid == 0) print*, 'Aborting...'
         call MPI_FINALIZE(ierr)
         error stop
@@ -133,10 +132,10 @@ contains
     dy = dl(2)
     !
     open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if( ierr == 0 ) then
+      if(ierr == 0) then
         read(iunit,nml=les,iostat=ierr)
       else
-        if(myid == 0) print*, 'Error reading the input file'
+        if(myid == 0) print*, 'Error opening the input file, nml = les'
         if(myid == 0) print*, 'Aborting...'
         call MPI_FINALIZE(ierr)
         error stop

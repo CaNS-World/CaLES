@@ -19,7 +19,7 @@ module mod_sgs
   contains
   !
   subroutine cmpt_sgs(sgstype,n,ng,lo,hi,cbcvel,cbcsgs,bcs,nb,is_bound,lwm,l,dl,dli,zc,zf,dzc,dzf, &
-                      dzci,dzfi,visc,h,index_wm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
+                      dzci,dzfi,visc,hwm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
     !
     ! compute subgrid viscosity at cell centers
     ! the LES with the dynamic model is ~2 times the cost of the LES with the static one.
@@ -38,14 +38,14 @@ module mod_sgs
     integer , intent(in ), dimension(3) :: n,ng,lo,hi
     character(len=1), intent(in), dimension(0:1,3,3) :: cbcvel
     character(len=1), intent(in), dimension(0:1,3)   :: cbcsgs
-    type(bound), intent(in   ) :: bcs
-    type(bound), intent(inout) :: bcuf,bcvf,bcwf
-    type(bound), intent(in   ) :: bcu_mag,bcv_mag,bcw_mag
-    integer , intent(in ), dimension(0:1,3)      :: nb,lwm,index_wm
+    type(Bound), intent(in   ) :: bcs
+    type(Bound), intent(inout) :: bcuf,bcvf,bcwf
+    type(Bound), intent(in   ) :: bcu_mag,bcv_mag,bcw_mag
+    integer , intent(in ), dimension(0:1,3)      :: nb,lwm
     logical , intent(in ), dimension(0:1,3)      :: is_bound
     real(rp), intent(in ), dimension(3)          :: l,dl,dli
     real(rp), intent(in ), dimension(0:)         :: zc,zf,dzc,dzf,dzci,dzfi
-    real(rp), intent(in )                        :: visc,h
+    real(rp), intent(in )                        :: visc,hwm
     real(rp), intent(in ), dimension(0:,0:,0:)   :: u,v,w
     real(rp), intent(out), dimension(0:,0:,0:)   :: visct
     real(rp), allocatable, dimension(:,:,:)  , save :: s0,uc,vc,wc,uf,vf,wf,alph2
@@ -55,7 +55,7 @@ module mod_sgs
                 fd,del,dw_min,tauw_s,mij_s(6),lij_s(6)
     real(rp), save :: is_wall(6)
     logical, save :: is_first = .true.
-    integer :: i,j,k,m,loc
+    integer :: i,j,k,m,ind_min
     real(rp), parameter :: one_third = 1._rp/3._rp
     !
     select case(trim(sgstype))
@@ -96,7 +96,7 @@ module mod_sgs
       visci = 1._rp/visc
       !
       !$acc parallel loop collapse(3) default(present) async(1) &
-      !$acc private(dw,tauw,loc,fd,del,tauw_s,dw_min,dw_plus)
+      !$acc private(dw,tauw,ind_min,fd,del,tauw_s,dw_min,dw_plus)
       do k=1,n(3)
         do j=1,n(2)
           do i=1,n(1)
@@ -104,7 +104,7 @@ module mod_sgs
               ! triperiodic
               fd = 1._rp
             else
-              ! van Driest damping
+              ! van Driest damping function
               dw(1) = dl(1)*(i-0.5)
               dw(2) = dl(1)*(n(1)-i+0.5)
               dw(3) = dl(2)*(j-0.5)
@@ -112,30 +112,30 @@ module mod_sgs
               dw(5) = zc(k)
               dw(6) = l(3)-zc(k)
               dw = dw*is_wall + big*(1._rp-is_wall)
-              loc = minloc(dw,1)
-              dw_min = dw(loc)
+              ind_min = minloc(dw,1)
+              dw_min = dw(ind_min)
               !
-              if(loc==1) then
+              if(ind_min==1) then
                 tauw(1) = v(1,j,k)-v(0,j,k)+v(1,j-1,k)-v(0,j-1,k)
                 tauw(2) = w(1,j,k)-w(0,j,k)+w(1,j,k-1)-w(0,j,k-1)
                 tauw_s = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dxi
-              else if(loc==2) then
+              else if(ind_min==2) then
                 tauw(1) = v(n(1),j,k)-v(n(1)+1,j,k)+v(n(1),j-1,k)-v(n(1)+1,j-1,k)
                 tauw(2) = w(n(1),j,k)-w(n(1)+1,j,k)+w(n(1),j,k-1)-w(n(1)+1,j,k-1)
                 tauw_s = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dxi
-              else if(loc==3) then
+              else if(ind_min==3) then
                 tauw(1) = u(i,1,k)-u(i,0,k)+u(i-1,1,k)-u(i-1,0,k)
                 tauw(2) = w(i,1,k)-w(i,0,k)+w(i,1,k-1)-w(i,0,k-1)
                 tauw_s  = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dyi
-              else if(loc==4) then
+              else if(ind_min==4) then
                 tauw(1) = u(i,n(2),k)-u(i,n(2)+1,k)+u(i-1,n(2),k)-u(i-1,n(2)+1,k)
                 tauw(2) = w(i,n(2),k)-w(i,n(2)+1,k)+w(i,n(2),k-1)-w(i,n(2)+1,k-1)
                 tauw_s  = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dyi
-              else if(loc==5) then
+              else if(ind_min==5) then
                 tauw(1) = u(i,j,1)-u(i,j,0)+u(i-1,j,1)-u(i-1,j,0)
                 tauw(2) = v(i,j,1)-v(i,j,0)+v(i,j-1,1)-v(i,j-1,0)
                 tauw_s  = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dzci(0)
-              else if(loc==6) then
+              else if(ind_min==6) then
                 tauw(1) = u(i,j,n(3))-u(i,j,n(3)+1)+u(i-1,j,n(3))-u(i-1,j,n(3)+1)
                 tauw(2) = v(i,j,n(3))-v(i,j,n(3)+1)+v(i,j-1,n(3))-v(i,j-1,n(3)+1)
                 tauw_s  = sqrt(tauw(1)*tauw(1)+tauw(2)*tauw(2))*dzci(n(3))
@@ -254,7 +254,7 @@ module mod_sgs
       ! should satisfy the wall bc's, evidenced by the fact that each mode satisfies
       ! the no-slip/no-penetration bc's if a spectral filter is applied.
       call bounduvw(cbcvel,n,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm, &
-                    l,dl,zc,zf,dzc,dzf,visc,h,index_wm,.false.,.false.,uf,vf,wf)
+                    l,dl,zc,zf,dzc,dzf,visc,hwm,.false.,.false.,uf,vf,wf)
       call extrapolate(n,is_bound,dzci,uf,iface=1,lwm=lwm)
       call extrapolate(n,is_bound,dzci,vf,iface=2,lwm=lwm)
       call extrapolate(n,is_bound,dzci,wf,iface=3,lwm=lwm)

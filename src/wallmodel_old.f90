@@ -29,8 +29,8 @@ module mod_wallmodel
     real(rp), intent(in), dimension(0:) :: zc,zf,dzc,dzf
     real(rp), intent(in) :: visc,h
     real(rp), intent(in), dimension(0:,0:,0:) :: u,v,w
-    type(bound), intent(inout) :: bcu,bcv,bcw
-    type(bound), intent(in   ) :: bcu_mag,bcv_mag,bcw_mag
+    type(Bound), intent(inout) :: bcu,bcv,bcw
+    type(Bound), intent(in   ) :: bcu_mag,bcv_mag,bcw_mag
     real(rp) :: wei,coef,uh,vh,wh,u1,u2,v1,v2,w1,w2,u_mag,v_mag,w_mag,tauw(2)
     integer  :: nh,i,j,k,i1,i2,j1,j2,k1,k2
     !

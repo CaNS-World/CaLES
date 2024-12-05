@@ -25,7 +25,7 @@
 !---------------------------------------------------------------------------------------------------------------
 ! CaLES -- Canonical Large-Eddy Simulation
 !---------------------------------------------------------------------------------------------------------------
-program cans
+program cales
   use, intrinsic :: iso_fortran_env, only: compiler_version,compiler_options
   use, intrinsic :: iso_c_binding  , only: C_PTR
   use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan
@@ -64,7 +64,7 @@ program cans
                                  rkcoeff,small, &
                                  datadir, &
                                  read_input, &
-                                 sgstype,lwm,hwm,index_wm
+                                 sgstype,lwm,hwm
   use mod_sanity         , only: test_sanity_input
 #if !defined(_OPENACC)
   use mod_solver         , only: solver
@@ -81,8 +81,9 @@ program cans
 #endif
   use mod_updatep        , only: updatep
   use mod_utils          , only: bulk_mean
-  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
+  use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: bound
+  use mod_smartredis     , only: FinalizeSmartRedis
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
   real(rp), allocatable, dimension(:,:,:) :: u,v,w,p,pp,visct
@@ -96,8 +97,8 @@ program cans
   real(rp), allocatable, dimension(:,:) :: lambdaxyp
   real(rp), allocatable, dimension(:) :: ap,bp,cp
   real(rp)    :: normfftp
-  type(bound) :: rhsbp
-  type(bound) :: bcu,bcv,bcw,bcp,bcs,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag
+  type(Bound) :: rhsbp
+  type(Bound) :: bcu,bcv,bcw,bcp,bcs,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag
   real(rp) :: alpha
 #if defined(_IMPDIFF)
 #if !defined(_OPENACC)
@@ -108,7 +109,7 @@ program cans
   real(rp), allocatable, dimension(:,:) :: lambdaxyu,lambdaxyv,lambdaxyw,lambdaxy
   real(rp), allocatable, dimension(:) :: au,av,aw,bu,bv,bw,cu,cv,cw,aa,bb,cc
   real(rp)    :: normfftu,normfftv,normfftw
-  type(bound) :: rhsbu,rhsbv,rhsbw ! implicit scheme
+  type(Bound) :: rhsbu,rhsbv,rhsbw ! implicit scheme
   real(rp), allocatable, dimension(:,:,:) :: rhsbx,rhsby,rhsbz
 #endif
   real(rp) :: dt,dti,dtmax,time,dtrk,dtrki,divtot,divmax
@@ -226,7 +227,7 @@ program cans
            rhsbz(  n(1),n(2),0:1))
 #endif
   !
-  if(myid == 0) print*, 'This executable of CaNS was built with compiler: ', compiler_version()
+  if(myid == 0) print*, 'This executable of CaLES was built with compiler: ', compiler_version()
   if(myid == 0) print*, 'Using the options: ', compiler_options()
   block
     character(len=MPI_MAX_LIBRARY_VERSION_STRING) :: mpi_version
@@ -290,7 +291,7 @@ program cans
   ! initialize boundary condition variables
   !
   call initbc(sgstype,cbcvel,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
-              bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc,hwm,index_wm)
+              bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc)
   !$acc enter data copyin(bcu,bcu%x,bcu%y,bcu%z) async
   !$acc enter data copyin(bcv,bcv%x,bcv%y,bcv%z) async
   !$acc enter data copyin(bcw,bcw%x,bcw%y,bcw%z) async
@@ -365,10 +366,10 @@ program cans
   !$acc enter data copyin(u,v,w,p) create(pp,visct) async
   !$acc wait
   call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                visc,hwm,index_wm,.true.,.false.,u,v,w)
+                visc,hwm,.true.,.false.,u,v,w)
   call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
   call cmpt_sgs(sgstype,n,ng,lo,hi,cbcvel,cbcsgs,bcs,nb,is_bound,lwm,l,dl,dli,zc,zf,dzc,dzf, &
-                dzci,dzfi,visc,hwm,index_wm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
+                dzci,dzfi,visc,hwm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
   call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,visct) ! corner ghost cells included
   !
   ! post-process and write initial condition
@@ -488,18 +489,18 @@ program cans
 #endif
       dpdl(:) = dpdl(:) + f(:) ! dt multiplied
       call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                    visc,hwm,index_wm,.true.,.false.,u,v,w)
+                    visc,hwm,.true.,.false.,u,v,w)
       call fillps(n,dli,dzfi,dtrki,u,v,w,pp)
       call updt_rhs_b(['c','c','c'],cbcpre,n,is_bound,rhsbp%x,rhsbp%y,rhsbp%z,pp)
       call solver(n,ng,arrplanp,normfftp,lambdaxyp,ap,bp,cp,cbcpre,['c','c','c'],pp)
       call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,pp)
       call correc(n,dli,dzci,dtrk,pp,u,v,w)
       call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                    visc,hwm,index_wm,.true.,.true.,u,v,w)
+                    visc,hwm,.true.,.true.,u,v,w)
       call updatep(n,dli,dzci,dzfi,alpha,pp,p)
       call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
       call cmpt_sgs(sgstype,n,ng,lo,hi,cbcvel,cbcsgs,bcs,nb,is_bound,lwm,l,dl,dli,zc,zf,dzc,dzf, &
-                    dzci,dzfi,visc,hwm,index_wm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
+                    dzci,dzfi,visc,hwm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,visct)
     end do
     dpdl(:) = -dpdl(:)*dti
@@ -625,5 +626,6 @@ program cans
 #endif
   if(myid == 0.and.(.not.kill)) print*, '*** Fim ***'
   call decomp_2d_finalize
+  call FinalizeSmartRedis()
   call MPI_FINALIZE(ierr)
-end program cans
+end program cales

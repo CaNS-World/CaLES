@@ -1,17 +1,20 @@
-!=======================================================================
-! comm_channel.f90
-! Contains communication routines specific to the CHANNEL case
-!=======================================================================
-module Comm_Channel
+! -
+!
+! SPDX-FileCopyrightText: Copyright (c) 2017-2022 Pedro Costa and the CaNS contributors.
+! SPDX-FileCopyrightText: Modifications Copyright (c) 2023-2024 Maochao Xiao and the CaLES contributors.
+! SPDX-License-Identifier: MIT
+!
+! -
+module mod_channel_comm
   use mpi
-  use Comm_Interface
+  use mod_comm_interface
   implicit none
   private
   public :: exchange_data_channel
 
 contains
 
-  subroutine exchange_data_wmodel(client, U, firstTimeStep, lastTimeStep, comm)
+  subroutine exchange_data_channel(client, U, firstTimeStep, lastTimeStep, comm)
     !---------------------------------------------------------------------
     ! MODULES
     use mpi
@@ -112,4 +115,4 @@ contains
     U = U * action  ! Replace with actual application logic
   end subroutine apply_action_channel
 
-end module Comm_Channel
+end module mod_channel_comm

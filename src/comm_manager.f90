@@ -1,13 +1,20 @@
-!=======================================================================
-! comm_manager.f90
-! Manages communication by coordinating data exchange based on simulation case
-!=======================================================================
-module Comm_Manager
+! -
+!
+! SPDX-FileCopyrightText: Copyright (c) 2017-2022 Pedro Costa and the CaNS contributors.
+! SPDX-FileCopyrightText: Modifications Copyright (c) 2023-2024 Maochao Xiao and the CaLES contributors.
+! SPDX-License-Identifier: MIT
+!
+! -
+module mod_comm_manager
   use mpi
-  use Comm_Interface
-  use Comm_SmartRedis
-  use Comm_Channel
-  implicit none
+  use mod_channel_comm
+  implicit none! -
+  !
+  ! SPDX-FileCopyrightText: Copyright (c) 2017-2022 Pedro Costa and the CaNS contributors.
+  ! SPDX-FileCopyrightText: Modifications Copyright (c) 2023-2024 Maochao Xiao and the CaLES contributors.
+  ! SPDX-License-Identifier: MIT
+  !
+  ! -
   private
   public :: define_parameters_comm_manager
   public :: init_comm_manager
@@ -67,7 +74,7 @@ contains
 
     select case (Comm_Type)
     case (PRM_COMM_CHANNEL)
-      call exchange_data_wall_model(Client, U, firstTimeStep, lastTimeStep, comm)
+      call exchange_data_channel(Client, U, firstTimeStep, lastTimeStep, comm)
     case (PRM_COMM_HIT)
       call exchange_data_hit(Client, U, firstTimeStep, lastTimeStep, comm)
     case default
@@ -84,4 +91,4 @@ contains
     ! ...
   end subroutine analyze
 
-end module Comm_Manager
+end module mod_comm_manager

@@ -9,28 +9,28 @@ module mod_bound
   use mpi
   use mod_common_mpi, only: ierr,halo,ipencil_axis
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  use mod_typedef   , only: bound
-  use mod_wallmodel    , only: updt_wallmodelbc
+  use mod_typedef, only: bound
+  use mod_wallmodel, only: updt_wallmodelbcs
   implicit none
   private
   public boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
   contains
   subroutine bounduvw(cbc,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                      visc,h,index_wm,is_updt_wm,is_correc,u,v,w)
+                      visc,hwm,is_updt_wm,is_correc,u,v,w)
     !
     ! imposes velocity boundary conditions
     !
     implicit none
     character(len=1), intent(in), dimension(0:1,3,3) :: cbc
     integer         , intent(in), dimension(3) :: n
-    type(bound)     , intent(inout) :: bcu,bcv,bcw
-    type(bound)     , intent(in) :: bcu_mag,bcv_mag,bcw_mag
+    type(Bound)     , intent(inout) :: bcu,bcv,bcw
+    type(Bound)     , intent(in) :: bcu_mag,bcv_mag,bcw_mag
     integer , intent(in), dimension(0:1,3) :: nb
     logical , intent(in), dimension(0:1,3) :: is_bound
-    integer , intent(in), dimension(0:1,3) :: lwm,index_wm
+    integer , intent(in), dimension(0:1,3) :: lwm
     real(rp), intent(in), dimension(3) :: l,dl
     real(rp), intent(in), dimension(0:) :: zc,zf,dzc,dzf
-    real(rp), intent(in) :: visc,h
+    real(rp), intent(in) :: visc,hwm
     logical , intent(in) :: is_updt_wm,is_correc
     real(rp), intent(inout), dimension(0:,0:,0:) :: u,v,w
     character(len=1), dimension(0:1,3,3) :: cbc_w
@@ -105,7 +105,7 @@ module mod_bound
     ! (Neumann). Wall models can guarantee this at those locations, since they do
     ! produce a zero gradient in the direction where the velocity component is zero.
     ! 
-    ! bcu/v/w have correct values for all the loop locations in updt_wallmodelbc.
+    ! bcu/v/w have correct values for all the loop locations in updt_wallmodelbcs.
     ! The only difference is that for square duct/six-wall cases, uh,vh and wh may
     ! have incorrect values at the end locations. However, it is only the zero-value
     ! component (wall-normal) that is essentially used, which guarantees
@@ -114,11 +114,11 @@ module mod_bound
     ! Therefore, it makes no difference whether the wall-parallel velocity at the wall
     ! is set to zero or not, as it is never utilized.
     !
-    ! updt_wallmodelbc, ~25% of bounduvw time is saved, equivalent to ~1% of the total time,
+    ! updt_wallmodelbcs, ~25% of bounduvw time is saved, equivalent to ~1% of the total time,
     ! The computational cost of the log-law wall model is negligible.
     !
     if(is_updt_wm) then
-      call updt_wallmodelbc(n,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,h,index_wm,u,v,w, &
+      call updt_wallmodelbcs(n,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
                             bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag)
     end if
     !
@@ -161,7 +161,7 @@ module mod_bound
     implicit none
     character(len=1), intent(in), dimension(0:1,3) :: cbc
     integer         , intent(in), dimension(3) :: n
-    type(bound)     , intent(in) :: bcp
+    type(Bound)     , intent(in) :: bcp
     integer , intent(in), dimension(0:1,3) :: nb
     logical , intent(in), dimension(0:1,3) :: is_bound
     real(rp), intent(in), dimension(3 ) :: dl
@@ -449,11 +449,11 @@ module mod_bound
     ! compute values added to the right hand side
     !
     implicit none
-    integer , intent(in), dimension(3) :: ng
-    real(rp), intent(in), dimension(3 ) :: dl
+    integer , intent(in), dimension(3)  :: ng
+    real(rp), intent(in), dimension(3)  :: dl
     real(rp), intent(in), dimension(0:) :: dzc,dzf
     character(len=1), intent(in), dimension(0:1,3) :: cbc
-    type(bound)     , intent(in) :: bc
+    type(Bound)     , intent(in) :: bc
     character(len=1), intent(in), dimension(3) :: c_or_f
     real(rp), intent(out), dimension(:,:,0:), optional :: rhsbx
     real(rp), intent(out), dimension(:,:,0:), optional :: rhsby
@@ -724,7 +724,7 @@ module mod_bound
 #endif
   !
   subroutine initbc(sgstype,cbcvel,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
-                    bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc,h,index_wm)
+                    bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc)
     !
     ! initialize bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag,bcuf,bcvf,bcwf
     !
@@ -733,14 +733,12 @@ module mod_bound
     character(len=1), intent(inout), dimension(0:1,3,3) :: cbcvel
     real(rp)   , intent(in), dimension(0:1,3,3) :: bcvel
     real(rp)   , intent(in), dimension(0:1,3) :: bcpre,bcsgs
-    type(bound), intent(inout) :: bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag,bcuf,bcvf,bcwf
+    type(Bound), intent(inout) :: bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag,bcuf,bcvf,bcwf
     integer , intent(in), dimension(3) :: n
     logical , intent(in), dimension(0:1,3) :: is_bound
     integer , intent(in), dimension(0:1,3) :: lwm
     real(rp), intent(in), dimension(3) :: l,dl
     real(rp), intent(in), dimension(0:) :: zc,dzc
-    real(rp), intent(in) :: h
-    integer,  intent(out), dimension(0:1,3) :: index_wm
     integer :: i,j,k,i1,i2,j1,j2,k1,k2,ivel,idir
     !
     do idir = 1,3
@@ -758,8 +756,9 @@ module mod_bound
     end do
     !
     ! unnecessary to consider wall model here, because
-    ! bcu,bcv,bcw are overwritten by updt_wallmodelbc before set_bc, and that
-    ! imp3d never used for WMLES. Only imp1d and explicit can be applied.
+    ! bcu,bcv,bcw are overwritten by updt_wallmodelbcs before set_bc. 
+    ! Imp1d and explicit can be applied to WMLES. When imp3d is used for WMLES,
+    ! only the z direction can be wall-model bc's.
     !
     bcu%x(:,:,0) = bcvel(0,1,1)
     bcv%x(:,:,0) = bcvel(0,1,2)
@@ -803,66 +802,6 @@ module mod_bound
     bcuf = bcu
     bcvf = bcv
     bcwf = bcw
-    !
-    ! find the index required for interpolation to the wall model height.
-    ! The stored index corresponds to the cells far from a wall, i.e., i2,j2,k2.
-    ! Remmeber to set h strightly higher than the first cell center, and lower 
-    ! than the last cell center (h=h-eps)
-    !
-    if(is_bound(0,1).and.lwm(0,1)/=0) then
-      i = 1
-      do while((i-0.5)*dl(1) < h)
-        i = i + 1
-      end do
-      i2 = i
-      i1 = i - 1
-      index_wm(0,1) = i2
-    end if
-    if(is_bound(1,1).and.lwm(1,1)/=0) then
-      i = n(1)
-      do while((n(1)-i+0.5)*dl(1) < h)
-        i = i - 1
-      end do
-      i2 = i
-      i1 = i + 1
-      index_wm(1,1) = i2
-    end if
-    if(is_bound(0,2).and.lwm(0,2)/=0) then
-      j = 1
-      do while((j-0.5)*dl(2) < h)
-        j = j + 1
-      end do
-      j2 = j
-      j1 = j - 1
-      index_wm(0,2) = j2
-    end if
-    if(is_bound(1,2).and.lwm(1,2)/=0) then
-      j = n(2)
-      do while((n(2)-j+0.5)*dl(2) < h)
-        j = j - 1
-      end do
-      j2 = j
-      j1 = j + 1
-      index_wm(1,2) = j2
-    end if
-    if(is_bound(0,3).and.lwm(0,3)/=0) then
-      k = 1
-      do while(zc(k) < h)
-        k = k + 1
-      end do
-      k2 = k
-      k1 = k - 1
-      index_wm(0,3) = k2
-    end if
-    if(is_bound(1,3).and.lwm(1,3)/=0) then
-      k = n(3)
-      do while(l(3)-zc(k) < h)
-        k = k - 1
-      end do
-      k2 = k
-      k1 = k + 1
-      index_wm(1,3) = k2
-    end if
     !
   end subroutine initbc
 end module mod_bound

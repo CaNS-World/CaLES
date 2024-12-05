@@ -27,3 +27,6 @@ endif
 endif
 
 endif
+
+override LIBS += -L/home/mchao/code/flexi-extensions/share/GNU-MPI/SmartRedis/src/smartredis/install/lib -lsmartredis -lsmartredis-fortran
+override INCS += -I/home/mchao/code/flexi-extensions/share/GNU-MPI/SmartRedis/src/smartredis/install/include

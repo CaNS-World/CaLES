@@ -23,15 +23,15 @@ module mod_sanity
 #else
   use mod_solver_gpu, only: solver => solver_gpu
 #endif
-  use mod_wallmodel    , only: updt_wallmodelbc
+  use mod_wallmodel , only: updt_wallmodelbcs
   use mod_typedef   , only: bound
-  use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
+  use mod_precision , only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
   public test_sanity_input
   contains
   subroutine test_sanity_input(ng,dims,sgstype,stop_type,cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs, &
-                               n,is_bound,lwm,l,zc,dl,h,is_forced)
+                               n,is_bound,lwm,l,zc,dl,hwm,is_forced)
     !
     ! performs some a priori checks of the input files before the calculation starts
     !
@@ -49,13 +49,13 @@ module mod_sanity
     integer, intent(in), dimension(0:1,3) :: lwm
     real(rp), intent(in), dimension(3) :: l,dl
     real(rp), intent(in), dimension(0:) :: zc
-    real(rp), intent(in) :: h
+    real(rp), intent(in) :: hwm
     logical, intent(in), dimension(3) :: is_forced
     logical :: passed
     !
     call chk_dims(ng,dims,cbcvel,sgstype,passed); if(.not.passed) call abortit
     call chk_stop_type(stop_type,passed); if(.not.passed) call abortit
-    call chk_bc(cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,n,is_bound,lwm,l,zc,dl,h,passed); if(.not.passed) call abortit
+    call chk_bc(cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,n,is_bound,lwm,l,zc,dl,hwm,passed); if(.not.passed) call abortit
     call chk_forcing(cbcpre,is_forced,passed); if(.not.passed) call abortit
 #if defined(_IMPDIFF_1D) && !defined(_IMPDIFF)
     if(myid == 0)  print*, 'ERROR: `_IMPDIFF_1D` cpp macro requires building with `_IMPDIFF` too.'; call abortit
@@ -112,7 +112,7 @@ module mod_sanity
     !
   end subroutine chk_dims
   !
-  subroutine chk_bc(cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,n,is_bound,lwm,l,zc,dl,h,passed)
+  subroutine chk_bc(cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,n,is_bound,lwm,l,zc,dl,hwm,passed)
     implicit none
     character(len=1), intent(in), dimension(0:1,3,3) :: cbcvel
     character(len=1), intent(in), dimension(0:1,3) :: cbcpre,cbcsgs
@@ -123,7 +123,7 @@ module mod_sanity
     integer, intent(in), dimension(0:1,3) :: lwm
     real(rp), intent(in), dimension(3) :: l,dl
     real(rp), intent(in), dimension(0:) :: zc
-    real(rp), intent(in) :: h
+    real(rp), intent(in) :: hwm
     logical, intent(out) :: passed
     character(len=2) :: bc01v,bc01p,bc01s
     integer :: i,ivel,idir
@@ -221,12 +221,12 @@ module mod_sanity
     passed = passed.and.passed_loc
     !
     passed_loc = .true.
-    if(is_bound(0,1).and.lwm(0,1)/=0) passed_loc = passed_loc.and.(h>0.5_rp*dl(1) .and.h<(n(1)-0.5_rp)*dl(1))
-    if(is_bound(1,1).and.lwm(1,1)/=0) passed_loc = passed_loc.and.(h>0.5_rp*dl(1) .and.h<(n(1)-0.5_rp)*dl(1))
-    if(is_bound(0,2).and.lwm(0,2)/=0) passed_loc = passed_loc.and.(h>0.5_rp*dl(2) .and.h<(n(2)-0.5_rp)*dl(2))
-    if(is_bound(1,2).and.lwm(1,2)/=0) passed_loc = passed_loc.and.(h>0.5_rp*dl(2) .and.h<(n(2)-0.5_rp)*dl(2))
-    if(is_bound(0,3).and.lwm(0,3)/=0) passed_loc = passed_loc.and.(h>zc(1)        .and.h<zc(n(3))  )
-    if(is_bound(1,3).and.lwm(1,3)/=0) passed_loc = passed_loc.and.(h>l(3)-zc(n(3)).and.h<l(3)-zc(1))
+    if(is_bound(0,1).and.lwm(0,1)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(1) .and.hwm<(n(1)-0.5_rp)*dl(1))
+    if(is_bound(1,1).and.lwm(1,1)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(1) .and.hwm<(n(1)-0.5_rp)*dl(1))
+    if(is_bound(0,2).and.lwm(0,2)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(2) .and.hwm<(n(2)-0.5_rp)*dl(2))
+    if(is_bound(1,2).and.lwm(1,2)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(2) .and.hwm<(n(2)-0.5_rp)*dl(2))
+    if(is_bound(0,3).and.lwm(0,3)/=0) passed_loc = passed_loc.and.(hwm>zc(1)        .and.hwm<zc(n(3))  )
+    if(is_bound(1,3).and.lwm(1,3)/=0) passed_loc = passed_loc.and.(hwm>l(3)-zc(n(3)).and.hwm<l(3)-zc(1))
     if(.not.passed_loc) print*, 'ERROR: invalid wall model height.'
     passed = passed.and.passed_loc
     !

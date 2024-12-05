@@ -7,9 +7,9 @@
 ! -
 module mod_typedef
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  type bound
-  real(rp), allocatable, dimension(:,:,:) :: x
-  real(rp), allocatable, dimension(:,:,:) :: y
-  real(rp), allocatable, dimension(:,:,:) :: z
-  end type bound
+  type Bound
+    real(rp), allocatable, dimension(:,:,:) :: x
+    real(rp), allocatable, dimension(:,:,:) :: y
+    real(rp), allocatable, dimension(:,:,:) :: z
+  end type Bound
 end module mod_typedef
