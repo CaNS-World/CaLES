@@ -23,3 +23,5 @@ src/.depend.mk
 validation/
 build.conf
 configs/flags.mk
+configs/libs.mk
+configs/compilers.mk
