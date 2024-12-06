@@ -1,1 +1,0 @@
-../src/initmpi.f90

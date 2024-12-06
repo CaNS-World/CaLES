@@ -6,28 +6,16 @@
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 SHELL=/bin/bash
 
-#
-# in case one wants to keep track of the current version and compilation date
-# one can use the variables below and append
-# `-D_VERSION=\"$(CURRENT_REVISION)\" -D_DATE=\"$(NOW)\"
-#
-#GIT_VERSION := $(shell git describe --tags)
-#CURRENT_REVISION := $(shell git rev-parse --short HEAD)
-#NOW := $(shell date +"%FT%T%z")
-
 # Project name
 NAME := cales
 
 TARGET := $(NAME)
 INPUT_FILE := input.nml
 
-#PWD=$(shell pwd)
-#ROOT_DIR := $(PWD)
-#ROOT_DIR := $(shell realpath .)
 ROOT_DIR := .
-SRCS_DIR := $(ROOT_DIR)/build
-APP_DIR := $(ROOT_DIR)/app
-EXE_DIR := $(ROOT_DIR)
+SRCS_DIR := $(ROOT_DIR)/src
+BUILD_DIR := $(ROOT_DIR)/build
+EXE_DIR := $(BUILD_DIR)
 CONFIG_DIR := $(ROOT_DIR)/configs
 LIBS_DIR := $(ROOT_DIR)/dependencies
 LIBS :=
@@ -46,47 +34,43 @@ RM := rm -f
 GD := $(ROOT_DIR)/src/.gen-deps.awk
 CPP := -cpp
 
-# edit build.conf file desired
+# Edit build.conf file desired
 -include $(ROOT_DIR)/build.conf
 -include $(CONFIG_DIR)/compilers.mk
 -include $(CONFIG_DIR)/flags.mk
 -include $(CONFIG_DIR)/libs.mk
 
 # List of all source files
-SRCS_INC := $(wildcard $(SRCS_DIR)/*-inc.f90 $(SRCS_DIR)/*.h90)
-SRCS := $(filter-out $(SRCS_INC), $(wildcard $(SRCS_DIR)/*.f90) $(wildcard $(APP_DIR)/*.f90))
+SRCS_INC := $(wildcard $(SRCS_DIR)/*.h90)
+SRCS := $(filter-out $(SRCS_INC), $(wildcard $(SRCS_DIR)/*.f90))
 
 # Add source directory to search paths
 vpath % .:$(SRCS_DIR)
 vpath % $(patsubst -I%,%,$(filter -I%,$(INCS)))
 
 # Define a map from each file name to its object file
-obj = $(src).o
+obj = $(BUILD_DIR)/$(notdir $(src)).o
 $(foreach src, $(SRCS), $(eval $(src) := $(obj)))
 
 # Create lists of the build artefacts in this project
-OBJS := $(addsuffix .o, $(SRCS))
-LIB := $(patsubst %, lib%.a, $(NAME))
-DEPS := $(SRCS_DIR)/.depend.mk
+OBJS := $(patsubst $(SRCS_DIR)/%, $(BUILD_DIR)/%.o, $(SRCS))
+DEPS := $(BUILD_DIR)/.depend.mk
 
 # Declare all public targets
-.PHONY: all clean allclean libs libsclean run
+.PHONY: all clean allclean libs libsclean
 all: $(EXE)
 
 $(EXE): $(OBJS)
-#	@mkdir -p $(EXE_DIR)/data
 	$(FC) $(FFLAGS) $^ $(LIBS) $(INCS) -o $(EXE)
 
-run: $(EXE)
-	@cp $(SRCS_DIR)/$(INPUT_FILE) $(EXE_DIR)
-	@printf "\nDefault input file $(INPUT_FILE) copied to run folder $(EXE_DIR)\n"
-
 # Create object files from Fortran source
+$(OBJS): $(BUILD_DIR)/%.o: $(SRCS_DIR)/%
+	$(FC) $(FFLAGS) $(CPP) $(DEFINES) $(INCS) $(FFLAGS_MOD_DIR) $(BUILD_DIR) -c -o $@ $<
 
-$(OBJS): %.o: %
-	$(FC) $(FFLAGS) $(CPP) $(DEFINES) $(INCS) $(FFLAGS_MOD_DIR) $(SRCS_DIR) -c -o $@ $<
 # Process the Fortran source for module dependencies
+# Create the build directory automatically if missing
 $(DEPS):
+	@mkdir -p $(BUILD_DIR) 
 	@echo '# This file contains the module dependencies' > $(DEPS)
 	@$(foreach file, $(SRCS), $(GD) $(file) >> $(DEPS))
 
@@ -96,7 +80,7 @@ $(foreach dep, $(OBJS), $(eval $(dep): $($(dep))))
 
 # Cleanup, filter to avoid removing source code by accident
 clean:
-	$(RM) $(SRCS_DIR)/*.{i,mod,smod,d,o} $(EXE) $(DEPS)
+	$(RM) $(BUILD_DIR)/*.{i,mod,smod,d,o} $(EXE) $(DEPS)
 
 allclean:
 	@make libsclean
