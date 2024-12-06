@@ -1,15 +1,14 @@
-# about the input file `input.nml`
+# Setting `input.nml`
 
-Consider the following input file as example (corresponds to a turbulent plane channel flow). `&dns` defines a so-called Fortran namelist containing all the necessary physical and computational parameters to set a case.
-
+Consider the following input file as an example of wall-modeled LES (WMLES) of a turbulent plane channel flow. The `&dns` namelist contains the necessary physical and computational parameters to set a case. The `&les` namelist includes parameters for the large-eddy simulation model. The `&cudecomp` namelist is optional and sets some runtime configurations for the cuDecomp library.
 
 ```fortran
 &dns
-ng(1:3) = 512, 256, 144
-l(1:3) = 6., 3., 1.
-gtype = 1, gr = 0.
+ng(1:3) = 128, 96, 64
+l(1:3) = 12.8, 4.8, 2.
+gtype = 6, gr = 0.
 cfl = 0.95, dtmin = 1.e5
-visci = 5640.
+visci = 125000.
 inivel = 'poi'
 is_wallturb = T
 nstep = 100000, time_max = 100., tw_max = 0.1
@@ -20,20 +19,29 @@ cbcvel(0:1,1:3,1) = 'P','P',  'P','P',  'D','D'
 cbcvel(0:1,1:3,2) = 'P','P',  'P','P',  'D','D'
 cbcvel(0:1,1:3,3) = 'P','P',  'P','P',  'D','D'
 cbcpre(0:1,1:3)   = 'P','P',  'P','P',  'N','N'
+cbcsgs(0:1,1:3)   = 'P','P',  'P','P',  'D','D'
 bcvel(0:1,1:3,1) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,2) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,3) =  0.,0.,   0.,0.,   0.,0.
 bcpre(0:1,1:3  ) =  0.,0.,   0.,0.,   0.,0.
+bcsgs(0:1,1:3)   =  0.,0.,   0.,0.,   0.,0.
 bforce(1:3) = 0., 0., 0.
 is_forced(1:3) = T, F, F
 velf(1:3) = 1., 0., 0.
 dims(1:2) = 2, 2
 \
+&les
+sgstype = 'smag'
+lwm(0:1,1:3) = 0,0, 0,0, 1,1
+hwm = 0.1
+\
+&cudecomp
+cudecomp_t_comm_backend = 0, cudecomp_is_t_enable_nccl = T, cudecomp_is_t_enable_nvshmem = T
+cudecomp_h_comm_backend = 0, cudecomp_is_h_enable_nccl = T, cudecomp_is_h_enable_nvshmem = T
+\
 ```
-<details>
 
-<summary>Tip for vim/nvim users</summary>
-Consider adding the following lines in your `.vimrc` file for syntax highlighting of the namelist file:
+Here is a tip for vim/nvim users. Consider adding the following lines in your `.vimrc` file for syntax highlighting of the namelist file:
 
 ```vim
 if has("autocmd")
@@ -42,15 +50,12 @@ if has("autocmd")
 endif
 ```
 
-</details>
-
----
----
+## Namelist `&dns`
 
 ```fortran
-ng(1:3) = 512, 256, 144
-l(1:3) = 6., 3., 1.
-gtype = 1, gr = 0.
+ng(1:3) = 128, 96, 64
+l(1:3) = 12.8, 4.8, 2.
+gtype = 6, gr = 0.
 ```
 
 These lines set the computational grid.
@@ -63,6 +68,8 @@ These lines set the computational grid.
 * `2`: grid clustered towards the lower end
 * `3`: grid clustered towards the upper end
 * `4`: grid clustered towards the middle
+* `5`: grid clustered towards both ends naturally
+* `6`: grid clustered towards both ends suitable for WMLES of wall-bounded flows
 
 ---
 
@@ -78,10 +85,10 @@ The time step is set to be equal to `min(cfl*dtmax,dtmin)`, i.e. the minimum val
 ---
 
 ```fortran
-visci = 5640.
+visci = 125000.
 ```
 
-This line defines the inverse of the fluid viscosity, `visci`, meaning that the viscosity is `visc = visci**(-1)`. Note that, for a setup defined with unit reference length and velocity scales, `visci` has the same value as the flow Reynolds number.
+This line defines the inverse of the fluid viscosity, `visci`, meaning that the viscosity is `visc = visci**(-1)`. For a setup defined with two unit reference lengths and velocity scales, `visci` is half of the flow Reynolds number, as in the given example. For a setup defined with unit reference length and velocity scales, `visci` has the same value as the flow Reynolds number.
 
 ---
 
@@ -165,10 +172,12 @@ cbcvel(0:1,1:3,1) = 'P','P',  'P','P',  'D','D'
 cbcvel(0:1,1:3,2) = 'P','P',  'P','P',  'D','D'
 cbcvel(0:1,1:3,3) = 'P','P',  'P','P',  'D','D'
 cbcpre(0:1,1:3)   = 'P','P',  'P','P',  'N','N'
+cbcsgs(0:1,1:3)   = 'P','P',  'P','P',  'D','D'
 bcvel(0:1,1:3,1) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,2) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,3) =  0.,0.,   0.,0.,   0.,0.
 bcpre(0:1,1:3  ) =  0.,0.,   0.,0.,   0.,0.
+bcsgs(0:1,1:3)   =  0.,0.,   0.,0.,   0.,0.
 ```
 
 These lines set the boundary conditions (BC).
@@ -179,15 +188,13 @@ The **type** (BC) for each field variable are set by a row of six characters, `X
 * `Y0` `Y1` set the type of BC the field variable for the **lower** and **upper** boundaries in `y`
 * `Z0` `Z1` set the type of BC the field variable for the **lower** and **upper** boundaries in `z`
 
-The four rows correspond to the three velocity components, and pressure, i.e. `u`, `v`, `w`, and `p`.
-
-The following options are available:
+The first five rows correspond to the three velocity components, pressure and eddy viscosoty, i.e. `u`, `v`, `w`, `p` and `visct`. The following options are available:
 
 * `P` periodic
 * `D` Dirichlet
 * `N` Neumann
 
-The **last four rows** follow the same logic, but now for the BC **values** (dummy for a periodic direction).
+The next five rows follow the same logic but specify the boundary condition **values** (dummy for a periodic direction). When a wall model is applied to a wall, the boundary condition for that wall should be set to a no-slip condition as given in the example.
 
 ---
 
@@ -215,9 +222,29 @@ This line set the grid of computational subdomains.
 
 `dims` is the **processor grid**, the number of domain partitions along the first and second decomposed directions (which depend on the selected default pencil orientation). `dims(1)*dims(2)` corresponds therefore to the total number of computational subdomains. Setting `dims(:) = [0,0]` will trigger a runtime autotuning step to find the processor grid that minimizes transpose times. Note, however, that other components of the algorithm (e.g., collective I/O) may also be affected by the choice of processor grid.
 
-# about the `&cudecomp` namelist under `input.nml`
+## Namelist `&les`
+```fortran
+sgstype = 'smag'
+lwm(0:1,1:3) = 0,0, 0,0, 1,1
+hwm = 0.1
+```
 
-In addition to the `&dns` namelist in the input file, there is an **optional** namelist to set some runtime configurations for the *cuDecomp* library. Consider the following `&cudecomp` namelist, which corresponds to the default options in case the file is not provided:
+These lines set the subgrid-scale (SGS) model and wall model for the large-eddy simulation.
+
+`sgstype` is the type of **subgrid-scale model**. The following options are available:
+* `smag`: classical Smagorinsky model with the van Driest damping function
+* `dsmag`: dynamic Smagorinsky model with Lilly's modification
+
+`lwm(0:1,1:3)` sets the **types of wall model** for the LES. The first row corresponds to the lower wall, and the second row to the upper wall. The three columns correspond to the three domain directions. Different wall models can be applied to each wall and direction. The following options are available:
+* `0`: no wall model
+* `1`: logarithmic law wall model
+
+`hwm` is the **wall-modeled layer thickness**.
+
+
+## Namelist `&cudecomp`
+
+This is an **optional** namelist to set some runtime configurations for the *cuDecomp* library. Consider the following `&cudecomp` namelist, which corresponds to the default options in case the file is not provided:
 
 ```fortran
 &cudecomp
@@ -249,4 +276,4 @@ The second line is analogous to the first one, but for halo communication backen
 
 The other two boolean values, enable/disable the NCCL (`cudecomp_is_h_enable_nccl`) and NVSHMEM (`cudecomp_is_h_enable_nvshmem`) options for *halo* communication backend autotuning.
 
-Finally, it is worth recalling that passing `dims(1:2) = [0,0]` under `&dns` will trigger the *processor grid* autotuning, so there is no need to provide that option in the `&cudecomp` namelist.
+Finally, it is worth recalling that passing `dims(1:2) = [0,0]` under `&dns` will trigger the processor grid autotuning, so there is no need to provide that option in the `&cudecomp` namelist.

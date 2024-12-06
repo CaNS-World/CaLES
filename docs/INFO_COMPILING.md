@@ -1,6 +1,6 @@
-# Compiling CaNS
+# Compiling
 
-For most systems, CaNS can be compiled from the root directory with the following commands `make libs && make`, which will compile the 2DECOMP&FFT/cuDecomp libraries and CaNS. `make clean` clears the CaNS build files, `make libsclean` clears the 2DECOMP/cuDecomp builds, and `make allclean` clears both.
+For most systems, CaLES can be compiled from the root directory with the following commands `make libs && make`, which will compile the 2DECOMP&FFT/cuDecomp libraries and CaLES. `make clean` clears the CaLES build files, `make libsclean` clears the 2DECOMP/cuDecomp builds, and `make allclean` clears both.
 
 The `Makefile` in root directory is used to compiled the code, and is expected to work out-of-the-box for most systems. The `build.conf` file in the root directory can be used to choose the Fortran compiler (MPI wrapper), a few pre-defined profiles depending on the nature of the run (e.g., production vs debugging), and pre-processing options:
 
@@ -40,7 +40,7 @@ In this file, `FCOMP` can be one of `GNU` (`gfortran`), `INTEL` (`ifort`), `NVID
  * `GPU`                      : enable GPU accelerated runs (requires the `FCOMP=NVIDIA`)
  * `USE_NVTX`                 : enable [NVTX](https://docs.nvidia.com/nsight-visual-studio-edition/nvtx) markers to tag certain code regions and assist with profiling
 
-Typing `make libs` will build the 2DECOMP&FFT/cuDecomp libraries; then typing `make` will compile the code and copy the executable `cans` to a `run/` folder; `make run` will also copy the default input files `*.in` under `src/` to the same `run/` folder.
+Typing `make libs` will build the 2DECOMP&FFT/cuDecomp libraries; then typing `make` will compile the code and create the executable `cales` in `build/`.
 
 Note that cuDecomp needs to be dynamically linked before performing a GPU run. To do this, one should update the `LD_LIBRARY_PATH` environment variable as follows (from the root directory):
 ```
