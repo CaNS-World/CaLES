@@ -1,28 +1,47 @@
 <!--- the logo -->
-<img src="assets/img/CaLES-logo.png" height=150>
+<img src="assets/img/CaLES-logo.png" height=*>
 
 ## Overview
 
-CaLES (Canonical Large-Eddy Simulation) is a GPU-accelerated finite-difference solver designed for large-eddy simulations (LES) of incompressible wall-bounded flows in massively parallel environments. Built upon the existing direct numerical simulation (DNS) solver CaNS, CaLES relies on low-storage, third-order Runge-Kutta schemes for temporal discretization, with the option to treat viscous terms via an implicit Crank-Nicolson scheme in one or three directions. A fast direct solver, based on eigenfunction expansions, is used to solve the discretized Poisson/Helmholtz equations. For turbulence modeling, the classical Smagorinsky model with van Driest near-wall damping and the dynamic Smagorinsky model are implemented, along with a logarithmic law wall model. GPU acceleration is achieved through OpenACC directives, following CaNS-2.3.0. The predictive capability of CaLES has been tested using multiple flow cases, including decaying isotropic turbulence, turbulent channel flow, and turbulent duct flow.
-
-Some examples of flows that CaLES can solve include:
+**CaLES (Canonical Large-Eddy Simulation)** is a GPU-accelerated finite-difference solver designed for large-eddy simulations (LES) of incompressible wall-bounded flows in massively parallel environments. Built upon the existing direct numerical simulation (DNS) solver [CaNS](https://github.com/CaNS-World/CaNS), CaLES relies on low-storage, third-order Runge-Kutta schemes for temporal discretization, with the option to treat viscous terms via an implicit Crank-Nicolson scheme in one or three directions. A fast direct solver, based on eigenfunction expansions, is used to solve the discretized Poisson/Helmholtz equations. For turbulence modeling, the classical Smagorinsky model with van Driest near-wall damping and the dynamic Smagorinsky model are implemented, along with a logarithmic law wall model. GPU acceleration is achieved through OpenACC directives. Some examples of flows that CaLES can solve include:
 
  * periodic or developing channel
  * periodic or developing square duct
  * tri-periodic domain
  * lid-driven cavity
 
-
-In the x and y directions, the grid is uniform and the solver supports the following homogeneous boundary conditions for the pressure:
+In the `x` and `y` directions, the grid is uniform and the solver supports the following homogeneous boundary conditions for the Poisson equation:
 
  * Neumann-Neumann
  * Dirichlet-Dirichlet
  * Neumann-Dirichlet
  * Periodic
 
-In the z direction, the solver is more flexible as it uses Gauss elimination, and the grid can be non-uniform (e.g. fine at the boundary and coarser in the center).
+In the `z` direction, the solver offers more flexibility by using Gauss elimination, allowing for a non-uniform grid.
 
-CaLES allows for choosing an implicit temporal discretization of the momentum diffusion terms, either fully implicit or only along the z domain direction. This results in solving a 3D/1D Helmholtz equation per velocity component. In the fully implicit case, FFT-based solvers are also used, and the same options described above for pressure boundary conditions apply to the velocity. When the viscous terms are handled implicitly in all three directions, the wall model can only be applied in the $z$-direction, as homogeneous boundary conditions are required in the other two directions where FFTs are applied. However, this limitation may be irrelevant, as explicit time integration is commonly used for wall-modeled LES due to the large thickness of the first off-wall layer of cells. This restriction does not apply when the viscous terms are handled implicitly only in the $z$-direction.
+CaLES allows for choosing an implicit temporal discretization of the momentum diffusion terms, either fully implicit or only along the `z` direction. This results in solving a 3D/1D Helmholtz equation per velocity component. In the fully implicit case, FFT-based solvers are also used, and the same options described above for pressure boundary conditions apply to the velocity. This implies that if the wall model is used, it can only be applied in the `z` direction, as homogeneous boundary conditions are required in the other two directions where FFTs are applied. However, this limitation may be irrelevant, as explicit time integration is commonly used for wall-modeled LES due to the large thickness of the first off-wall layer of cells. Additionally, this restriction does not apply when the viscous terms are handled implicitly only in the `z`-direction.
+
+Please refer to the theory manual [docs/CaLES_theory.pdf](docs/CaLES_theory.pdf) for more information on the methodology of CaLES. The theory manual is also available on Overleaf at the following link: [https://www.overleaf.com/project/6726944a5f7564bafb3de8fb](https://www.overleaf.com/project/6726944a5f7564bafb3de8fb).
+
+## Implementation
+
+Some of the key implementation features of CaLES are:
+
+ * MPI parallelization
+ * FFTW guru interface/cuFFT used for computing multi-dimensional vectors of 1D transforms
+ * The right type of transformation (Fourier, cosine, sine, etc) is automatically determined form the input file
+ * [cuDecomp](https://github.com/NVIDIA/cuDecomp) pencil decomposition library for hardware-adaptive distributed memory calculations on many GPUs
+ * [2DECOMP&FFT](https://github.com/xcompact3d/2decomp-fft) library used for performing global data transpositions on CPUs and some of the data I/O
+ * GPU acceleration using OpenACC directives
+ * A different canonical flow can be simulated by simply changing the input files
+
+Please refer to the following references for further details:
+
+ * [Xiao, Maochao, Alessandro Ceci, Pedro Costa, Johan Larsson, and Sergio Pirozzoli. "CaLES: A GPU-accelerated solver for large-eddy simulation of wall-bounded flows." arXiv preprint arXiv:2411.09364 (2024).](https://arxiv.org/abs/2411.09364)
+
+ * [Costa, Pedro, Everett Phillips, Luca Brandt, and Massimiliano Fatica. "GPU acceleration of CaNS for massively-parallel direct numerical simulations of canonical fluid flows." Computers & Mathematics with Applications 81 (2021): 502-511.](https://doi.org/10.1016/j.camwa.2020.01.002)
+
+ * [Costa, Pedro. "A FFT-based finite-difference solver for massively-parallel direct numerical simulations of turbulent flows." Computers & Mathematics with Applications 76 (2018): 1853-1862.](https://doi.org/10.1016/j.camwa.2018.07.034)
 
 ## Getting Started
 
@@ -51,7 +70,7 @@ The `Makefile` in root directory is used to compile the code, and is expected to
  * `DEBUG`                    : performs some basic checks for debugging purposes
  * `TIMING`                   : wall-clock time per time step is computed
  * `IMPDIFF`                  : diffusion terms are integrated implicitly in time (thereby improving the stability of the numerical algorithm for viscous-dominated flows)
- * `IMPDIFF_1D`               : same as above, but with implicit diffusion *only* along Z; *for optimal parallel performance this option should be combined with* `PENCIL_AXIS=3`
+ * `IMPDIFF_1D`               : same as above, but with implicit diffusion only along z; for optimal parallel performance this option should be combined with `PENCIL_AXIS=3`
  * `PENCIL_AXIS`              : sets the default pencil direction, one of [1,2,3] for [X,Y,Z]-aligned pencils; X-aligned is the default and should be optimal for all cases except for Z implicit diffusion, where using Z-pencils is recommended
  * `SINGLE_PRECISION`         : calculation will be carried out in single precision (the default precision is double)
  * `GPU`                      : enable GPU-accelerated runs
@@ -59,7 +78,7 @@ The `Makefile` in root directory is used to compile the code, and is expected to
 
 The executable `cales` will be created in the `build/` directory.
 
-### Basic Usage
+### Running Simulations
 
 The input file `input.nml` sets the physical and computational parameters. In the `examples/` folder are examples of input files for several canonical flows. See [`INFO_INPUT.md`](docs/INFO_INPUT.md) for a detailed description of the input file.
 
@@ -71,25 +90,6 @@ mpirun -n 2 cales
 ```
 
 See [`INFO_VISU.md`](docs/INFO_VISU.md) for how to visualize the output files.
-
-**References**
-
-Xiao, Maochao, Alessandro Ceci, Pedro Costa, Johan Larsson, and Sergio Pirozzoli. "CaLES: A GPU-accelerated solver for large-eddy simulation of wall-bounded flows." arXiv preprint arXiv:2411.09364 (2024).
-
-Costa, Pedro, Everett Phillips, Luca Brandt, and Massimiliano Fatica. "GPU acceleration of CaNS for massively-parallel direct numerical simulations of canonical fluid flows." Computers & Mathematics with Applications 81 (2021): 502-511.
-
-Costa, Pedro. "A FFT-based finite-difference solver for massively-parallel direct numerical simulations of turbulent flows." Computers & Mathematics with Applications 76 (2018): 1853-1862.
-
-
-## Implementation
-
- * Hybrid MPI/OpenMP parallelization
- * FFTW guru interface / cuFFT used for computing multi-dimensional vectors of 1D transforms
- * The right type of transformation (Fourier, cosine, sine, etc) is automatically determined form the input file
- * [cuDecomp](https://github.com/NVIDIA/cuDecomp) pencil decomposition library for _hardware-adaptive_ distributed memory calculations on _many GPUs_
- * [2DECOMP&FFT](https://github.com/xcompact3d/2decomp-fft) library used for performing global data transpositions on CPUs and some of the data I/O
- * GPU acceleration using OpenACC directives
- * A different canonical flow can be simulated just by changing the input files
 
 ## Contributing
 
