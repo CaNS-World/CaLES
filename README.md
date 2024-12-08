@@ -21,7 +21,7 @@ In the `z` direction, the solver offers more flexibility by using Gauss eliminat
 
 CaLES allows for choosing an implicit temporal discretization of the momentum diffusion terms, either fully implicit or only along the `z` direction. This results in solving a 3D/1D Helmholtz equation per velocity component. In the fully implicit case, FFT-based solvers are also used, and the same options described above for pressure boundary conditions apply to the velocity. This implies that if the wall model is used, it can only be applied in the `z` direction, as homogeneous boundary conditions are required in the other two directions where FFTs are applied. However, this limitation may be irrelevant, as explicit time integration is commonly used for wall-modeled LES due to the large thickness of the first off-wall layer of cells. Additionally, this restriction does not apply when the viscous terms are handled implicitly only in the `z`-direction.
 
-Please refer to the theory manual [docs/CaLES_theory.pdf](docs/CaLES_theory.pdf) for more information on the methodology of CaLES. The theory manual is also available on Overleaf at the following link: [https://www.overleaf.com/project/6726944a5f7564bafb3de8fb](https://www.overleaf.com/project/6726944a5f7564bafb3de8fb).
+Please refer to the theory manual [docs/CaLES_theory.pdf](docs/CaLES_theory.pdf) for more information on the methodology of CaLES. The theory manual is also available on Overleaf at the following link: [https://www.overleaf.com/read/ggfmdsymppxm#9b973d](https://www.overleaf.com/read/ggfmdsymppxm#9b973d).
 
 ## Implementation
 
