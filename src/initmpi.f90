@@ -8,7 +8,7 @@
 module mod_initmpi
   use mpi
   use decomp_2d
-  use mod_common_mpi, only: myid,ierr,halo,ipencil => ipencil_axis
+  use mod_common_mpi, only: nprocs,myid,ierr,halo,ipencil => ipencil_axis
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   !@acc use openacc
   !@acc use cudecomp
@@ -38,7 +38,7 @@ module mod_initmpi
     integer, intent(out), dimension(0:1,3) :: nb
     logical, intent(out), dimension(0:1,3) :: is_bound
     logical, dimension(3) :: periods
-    integer :: l,ipencil_t(2),nproc
+    integer :: l,ipencil_t(2)
 #if defined(_OPENACC)
     integer(acc_device_kind) ::dev_type
     integer :: local_comm,mydev,ndev
@@ -59,9 +59,8 @@ module mod_initmpi
     ipencil_t(:) = pack([1,2,3],[1,2,3] /= ipencil)
     is_bound(:,:) = .false.
     !
-    call MPI_COMM_SIZE(MPI_COMM_WORLD,nproc,ierr)
-    if(product(dims)==0.and.nproc>=2.and.trim(sgstype)=='smag') then
-      call calc_dims(cbcvel,sgstype,ipencil_t,nproc,dims)
+    if(product(dims)==0.and.nprocs>=2.and.trim(sgstype)=='smag') then
+      call calc_dims(cbcvel,sgstype,ipencil_t,nprocs,dims)
       if(myid == 0) then
         print*, 'In auto-tuning mode......'
         print*, 'p_row x p_col',dims(1),dims(2)
@@ -223,7 +222,7 @@ module mod_initmpi
     !exchange (n(1)+2)*(n(2)+2) cells in the z direction
   end subroutine makehalo
   !
-  subroutine calc_dims(cbcvel,sgstype,ipencil_t,nproc,dims)
+  subroutine calc_dims(cbcvel,sgstype,ipencil_t,dims)
     !
     ! calculate dims(1:2) to ensure <= 2 subdomains between two opposite walls.
     ! The splitting could be more general, but unnecessary for the current purpose.
@@ -232,7 +231,6 @@ module mod_initmpi
     character(len=1), intent(in), dimension(0:1,3,3) :: cbcvel
     character(len=*), intent(in) :: sgstype
     integer, intent(in),dimension(2) :: ipencil_t(2)
-    integer, intent(in) :: nproc
     integer, intent(inout), dimension(2) :: dims
     character(len=2) :: bc01v
     integer :: i,idir,ivel
@@ -242,12 +240,12 @@ module mod_initmpi
       ivel = ipencil_t(i)
       bc01v = cbcvel(0,idir,ivel)//cbcvel(1,idir,ivel)
       if(bc01v == 'DD') then
-        if(mod(nproc,2) == 1) then
+        if(mod(nprocs,2) == 1) then
           dims(i)   = 1
-          dims(3-i) = nproc
+          dims(3-i) = nprocs
         else
           dims(i)   = 2
-          dims(3-i) = nproc/2
+          dims(3-i) = nprocs/2
         end if
         exit
       end if

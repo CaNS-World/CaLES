@@ -34,7 +34,7 @@ program cales
   use mod_bound          , only: boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
   use mod_chkdiv         , only: chkdiv
   use mod_chkdt          , only: chkdt
-  use mod_common_mpi     , only: myid,ierr
+  use mod_common_mpi     , only: nprocs,myid,ierr
   use mod_correc         , only: correc
   use mod_fft            , only: fftini,fftend
   use mod_fillps         , only: fillps
@@ -131,6 +131,7 @@ program cales
   character(len=1) :: ctmp
   !
   call MPI_INIT(ierr)
+  call MPI_COMM_SIZE(MPI_COMM_WORLD,nprocs,ierr)
   call MPI_COMM_RANK(MPI_COMM_WORLD,myid,ierr)
   !
   ! read parameter file
