@@ -335,7 +335,7 @@ module mod_mom
   end subroutine bulk_forcing
   !
   subroutine cmpt_wallshear(n,is_cmpt,is_bound,l,dli,dzci,dzfi,visc,u,v,w,taux,tauy,tauz)
-    use mod_param, only: cbcpre
+    use mod_params, only: cbcpre
     implicit none
     integer , intent(in ), dimension(3) :: n
     logical , intent(in ), dimension(    3) :: is_cmpt

@@ -358,7 +358,7 @@ module mod_fft
     ! discrete sine transform (DST) may also be performed
     ! if one of the last boolean input variables is .true.
     !
-    use mod_param          , only: pi
+    use mod_params         , only: pi
     use mod_common_cudecomp, only: buf => work
     implicit none
     integer , intent(in   ) :: nn
@@ -409,7 +409,7 @@ module mod_fft
     ! discrete sine transform (DST) may also be performed
     ! if one of the last boolean input variables is .true.
     !
-    use mod_param          , only: pi
+    use mod_params         , only: pi
     use mod_common_cudecomp, only: buf => work
     implicit none
     integer , intent(in   ) :: nn

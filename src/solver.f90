@@ -107,7 +107,7 @@ module mod_solver
   end subroutine gaussel
   !
   subroutine gaussel_periodic(nx,ny,n,nh,a,b,c,p,lambdaxy)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in) :: nx,ny,n,nh
     real(rp), intent(in), dimension(:) :: a,b,c
@@ -151,7 +151,7 @@ module mod_solver
   end subroutine gaussel_periodic
   !
   subroutine dgtsv_homebrewed(n,a,b,c,p)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in) :: n
     real(rp), intent(in   ), dimension(:) :: a,b,c
@@ -180,7 +180,7 @@ module mod_solver
   !
 #if defined(_IMPDIFF_1D)
   subroutine solver_gaussel_z(n,a,b,c,bcz,c_or_f,p)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in), dimension(3) :: n
     real(rp), intent(in), dimension(:) :: a,b,c

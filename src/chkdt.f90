@@ -9,7 +9,7 @@ module mod_chkdt
   use mpi
   use mod_common_mpi, only:ierr
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  use mod_param, only: eps
+  use mod_params, only: eps
   implicit none
   private
   public chkdt

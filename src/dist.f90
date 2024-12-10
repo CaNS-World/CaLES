@@ -7,7 +7,7 @@
 ! -
 module mod_dist
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  use mod_param, only: big
+  use mod_params, only: big
   implicit none
   private
   public wall_dist

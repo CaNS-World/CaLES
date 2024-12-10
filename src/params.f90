@@ -5,7 +5,7 @@
 ! SPDX-License-Identifier: MIT
 !
 ! -
-module mod_param
+module mod_params
 use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
 !@acc use cudecomp
 implicit none
@@ -207,4 +207,4 @@ contains
     cudecomp_is_t_in_place = .false.
 #endif
   end subroutine read_input
-end module mod_param
+end module mod_params

@@ -64,7 +64,7 @@ module mod_initsolver
   end subroutine initsolver
   !
   subroutine eigenvalues(n,cbc,c_or_f,lambda)
-    use mod_param, only: pi
+    use mod_params, only: pi
     implicit none
     integer , intent(in ) :: n
     character(len=1), intent(in), dimension(0:1) :: cbc

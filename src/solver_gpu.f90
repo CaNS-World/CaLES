@@ -164,7 +164,7 @@ module mod_solver_gpu
   end subroutine solver_gpu
   !
   subroutine gaussel_gpu(nx,ny,n,nh,a,b,c,p,d,lambdaxy)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in) :: nx,ny,n,nh
     real(rp), intent(in), dimension(:) :: a,b,c
@@ -231,7 +231,7 @@ module mod_solver_gpu
   end subroutine gaussel_gpu
   !
   subroutine gaussel_periodic_gpu(nx,ny,n,nh,a,b,c,p,d,p1,p2,lambdaxy)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in) :: nx,ny,n,nh
     real(rp), intent(in), dimension(:) :: a,b,c
@@ -372,7 +372,7 @@ module mod_solver_gpu
   !
 #if defined(_IMPDIFF_1D)
   subroutine solver_gaussel_z_gpu(n,a,b,c,bcz,c_or_f,p)
-    use mod_param, only: eps
+    use mod_params, only: eps
     implicit none
     integer , intent(in), dimension(3) :: n
     real(rp), intent(in), dimension(:) :: a,b,c

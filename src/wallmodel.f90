@@ -10,7 +10,7 @@ module mod_wallmodel
   use mpi
   use mod_precision, only: rp, sp, dp, i8, MPI_REAL_RP
   use mod_typedef, only: bound
-  use mod_param, only: kap_log, b_log, eps
+  use mod_params, only: kap_log, b_log, eps
   use mod_smartredis, only: InitSmartRedis, ExchangeDataSmartRedis
   implicit none
   private

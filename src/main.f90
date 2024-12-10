@@ -49,7 +49,7 @@ program cales
   use mod_rk             , only: rk
   use mod_output         , only: out0d,gen_alias,out1d,out1d_chan,out1d_single_point_chan,out2d,out3d,write_log_output, &
                                  write_visu_2d,write_visu_3d,out2d_duct
-  use mod_param          , only: ng,l,dl,dli, &
+  use mod_params         , only: ng,l,dl,dli, &
                                  gtype,gr, &
                                  cfl,dtmin, &
                                  visc, &

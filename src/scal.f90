@@ -52,7 +52,7 @@ module mod_scal
   !
   subroutine cmpt_scalflux(n,is_bound,l,dli,dzci,dzfi,alpha,s,flux)
   use mpi
-  use mod_param, only: cbcpre ! needs to be replaced with scal bc
+  use mod_params, only: cbcpre ! needs to be replaced with scal bc
   implicit none
   integer , intent(in ), dimension(3) :: n
   logical , intent(in ), dimension(0:1,3) :: is_bound

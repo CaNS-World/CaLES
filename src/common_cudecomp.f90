@@ -11,7 +11,7 @@ module mod_common_cudecomp
   !@cuf use cudafor
   use cudecomp
   use openacc
-  use mod_param, only: cudecomp_is_t_in_place
+  use mod_params, only: cudecomp_is_t_in_place
   implicit none
   public
   integer :: cudecomp_real_rp

@@ -17,10 +17,10 @@ module mod_initmpi
   use mod_common_cudecomp, only: cudecomp_real_rp, &
                                  ch => handle,gd => gd_halo,gd_poi, &
                                  ap_x,ap_y,ap_z,ap_x_poi,ap_y_poi,ap_z_poi
-  use mod_param, only: cudecomp_t_comm_backend     ,cudecomp_h_comm_backend    , &
-                       cudecomp_is_t_comm_autotune ,cudecomp_is_h_comm_autotune, &
-                       cudecomp_is_t_enable_nccl   ,cudecomp_is_h_enable_nccl  , &
-                       cudecomp_is_t_enable_nvshmem,cudecomp_is_h_enable_nvshmem
+  use mod_params, only: cudecomp_t_comm_backend     ,cudecomp_h_comm_backend    , &
+                        cudecomp_is_t_comm_autotune ,cudecomp_is_h_comm_autotune, &
+                        cudecomp_is_t_enable_nccl   ,cudecomp_is_h_enable_nccl  , &
+                        cudecomp_is_t_enable_nvshmem,cudecomp_is_h_enable_nvshmem
 #endif
   implicit none
   private

@@ -17,7 +17,7 @@ module mod_sanity
   use mod_fillps    , only: fillps
   use mod_initflow  , only: add_noise
   use mod_initmpi   , only: initmpi
-  use mod_param     , only: small
+  use mod_params    , only: small
 #if !defined(_OPENACC)
   use mod_solver    , only: solver
 #else

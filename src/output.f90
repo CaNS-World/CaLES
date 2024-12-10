@@ -1003,7 +1003,7 @@ module mod_output
         close(10)
       end if
       block
-      use mod_param, only:dx,dy
+      use mod_params, only:dx,dy
       !$acc parallel loop gang default(present) async(1) &
       !$acc private(buf01,buf02,buf03,buf04,buf05,buf06) &
       !$acc private(div)
