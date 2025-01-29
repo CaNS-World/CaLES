@@ -2,7 +2,7 @@
 ng(1:3) = 192, 72, 48
 l(1:3) = 12.8, 4.8, 2.
 gtype = 6, gr = 0.
-cfl = 0.95, dtmin = 1.e5
+cfl = 0.95, dtmax = 1.e5, dt_f = -1.
 visci = 125000.
 inivel = 'poi'
 is_wallturb = T
