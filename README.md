@@ -61,6 +61,7 @@ The prerequisites for compiling CaLES are the following:
  * MPI
  * FFTW3/cuFFT library for CPU/GPU runs
  * The `nvfortran` compiler (for GPU runs)
+ * CMake for compiling the cuDecomp library (for GPU runs)
  * NCCL and NVSHMEM (optional, may be exploited by the cuDecomp library)
 
 For most systems, CaLES can be compiled from the root directory with the following commands `make libs && make`, which will compile the 2DECOMP&FFT/cuDecomp libraries and CaLES.
