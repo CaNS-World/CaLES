@@ -403,7 +403,7 @@ program cales
   end if
   call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dt_cfl)
   dt = merge(dt_f,min(cfl*dt_cfl,dtmax),dt_f > 0.)
-  if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
+  if(myid == 0) print*, 'dt_cfl = ', dt_cfl, 'dt = ', dt
   dti = 1./dt
   kill = .false.
   !
