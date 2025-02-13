@@ -23,6 +23,7 @@ module mod_params
 #endif
   real(rp), parameter :: small = epsilon(1._rp)*10**(precision(1._rp)/2)
   real(rp), parameter :: big = huge(1.0_rp)
+  character(len=100), parameter :: datadir = ''
   real(rp), parameter, dimension(2,3) :: rkcoeff = reshape([32._rp/60._rp,  0._rp        , &
                                                             25._rp/60._rp, -17._rp/60._rp, &
                                                             45._rp/60._rp, -25._rp/60._rp], shape(rkcoeff))
@@ -41,7 +42,6 @@ module mod_params
   real(rp), protected :: t_begin_control = 0._rp
   real(rp), protected :: f_action
   real(rp), protected :: t_episode
-  character(len=100), protected :: datadir = ''
   character(len=500), protected :: restart_file
   !
   ! input file
@@ -102,9 +102,11 @@ module mod_params
   subroutine read_input(myid)
     use mpi
     implicit none
+    character(len=*), parameter :: input_file = 'input.nml'
     integer, intent(in) :: myid
     integer :: iunit,ierr,nargs,i,pos
     character(len=100) :: arg,arg_val
+    character(len=1024) :: c_iomsg
     namelist /dns/ &
                   ng, &
                   l, &
@@ -171,20 +173,36 @@ module mod_params
         error stop
       end if
     end do
-    ! datadir = 'data_'//trim(adjustl(tag))//'/'
     !
     ! input.nml
     !
     dt_f = -1.
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if(ierr == 0) then
-        read(iunit,nml=dns,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error opening the input file (nml = dns)'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
+    open(newunit=iunit,file=input_file,status='old',action='read',iostat=ierr,iomsg=c_iomsg)
+    if(ierr /= 0) then
+      if(myid == 0) print*, 'Error reading the input file: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
+
+    read(iunit,nml=dns,iostat=ierr,iomsg=c_iomsg)
+    if(ierr /= 0) then
+      if(myid == 0) print*, 'Error reading dns namelist: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
+
+    read(iunit,nml=les,iostat=ierr,iomsg=c_iomsg)
+    if( ierr /= 0 ) then
+      if(myid == 0) print*, 'Error reading les namelist: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
     close(iunit)
     !
     dl(:) = l(:)/(1.*ng(:))
@@ -192,37 +210,25 @@ module mod_params
     visc = visci**(-1)
     dx = dl(1)
     dy = dl(2)
-    !
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if(ierr == 0) then
-        read(iunit,nml=les,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error opening the input file (nml = les)'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
-    close(iunit)
 #if defined(_OPENACC)
     !
-    ! cuDecomp parameters
-    !
+    ! cuDecomp parameters      
     cudecomp_is_t_comm_autotune  = .true.
     cudecomp_is_h_comm_autotune  = .true.
     cudecomp_is_t_enable_nccl    = .true.
     cudecomp_is_h_enable_nccl    = .true.
     cudecomp_is_t_enable_nvshmem = .true.
     cudecomp_is_h_enable_nvshmem = .true.
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if(ierr == 0) then
-        read(iunit,nml=cudecomp,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error reading the input file'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
-    close(iunit)
+    rewind(iunit)
+    read(iunit,nml=cudecomp,iostat=ierr,iomsg=c_iomsg)
+    if(ierr /= 0) then
+      if(myid == 0) print*, 'Error reading cudecomp namelist: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
+    !
     if(cudecomp_t_comm_backend >= 1 .and. cudecomp_t_comm_backend <= 7) then
       cudecomp_is_t_comm_autotune = .false. ! do not autotune if backend is prescribed
       select case(cudecomp_t_comm_backend)
@@ -266,5 +272,6 @@ module mod_params
     !
     cudecomp_is_t_in_place = .false.
 #endif
+    close(iunit)
   end subroutine read_input
 end module mod_params
