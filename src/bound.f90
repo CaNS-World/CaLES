@@ -9,14 +9,12 @@ module mod_bound
   use mpi
   use mod_common_mpi, only: ierr,halo,ipencil_axis
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  use mod_typedef, only: bound
-  use mod_wallmodel, only: updt_wallmodelbcs
+  use mod_typedef, only: Bound
   implicit none
   private
   public boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
   contains
-  subroutine bounduvw(cbc,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                      visc,hwm,is_updt_wm,is_correc,u,v,w)
+  subroutine bounduvw(cbc,n,bcu,bcv,bcw,nb,is_bound,is_correc,dl,dzc,dzf,u,v,w)
     !
     ! imposes velocity boundary conditions
     !
@@ -24,18 +22,14 @@ module mod_bound
     character(len=1), intent(in), dimension(0:1,3,3) :: cbc
     integer         , intent(in), dimension(3) :: n
     type(Bound)     , intent(inout) :: bcu,bcv,bcw
-    type(Bound)     , intent(in) :: bcu_mag,bcv_mag,bcw_mag
     integer , intent(in), dimension(0:1,3) :: nb
     logical , intent(in), dimension(0:1,3) :: is_bound
-    integer , intent(in), dimension(0:1,3) :: lwm
-    real(rp), intent(in), dimension(3) :: l,dl
-    real(rp), intent(in), dimension(0:) :: zc,zf,dzc,dzf
-    real(rp), intent(in) :: visc,hwm
-    logical , intent(in) :: is_updt_wm,is_correc
+    logical , intent(in) :: is_correc
+    real(rp), intent(in), dimension(3 ) :: dl
+    real(rp), intent(in), dimension(0:) :: dzc,dzf
     real(rp), intent(inout), dimension(0:,0:,0:) :: u,v,w
-    character(len=1), dimension(0:1,3,3) :: cbc_w
     logical :: impose_norm_bc
-    integer :: i,j,k,idir,nh
+    integer :: idir,nh
     !
     nh = 1
     !
@@ -52,51 +46,39 @@ module mod_bound
 #endif
     !
     ! impose_norm_bc=0, the correction does not change wall-normal velocity on walls,
-    ! this also holds when a wall model is used due to non-penetrating bc
+    ! this also holds when a wall model is used due to non-penetration.
     impose_norm_bc = (.not.is_correc).or.(cbc(0,1,1)//cbc(1,1,1) == 'PP')
     if(is_bound(0,1)) then
       if(impose_norm_bc)  call set_bc(cbc(0,1,1),0,1,nh,.false.,bcu%x,dl(1),u)
-      if(lwm(0,1)==0) then
                           call set_bc(cbc(0,1,2),0,1,nh,.true. ,bcv%x,dl(1),v)
                           call set_bc(cbc(0,1,3),0,1,nh,.true. ,bcw%x,dl(1),w)
-      end if
     end if
     if(is_bound(1,1)) then
       if(impose_norm_bc)  call set_bc(cbc(1,1,1),1,1,nh,.false.,bcu%x,dl(1),u)
-      if(lwm(1,1)==0) then    
                           call set_bc(cbc(1,1,2),1,1,nh,.true. ,bcv%x,dl(1),v)
                           call set_bc(cbc(1,1,3),1,1,nh,.true. ,bcw%x,dl(1),w)
-      end if
     end if
     impose_norm_bc = (.not.is_correc).or.(cbc(0,2,2)//cbc(1,2,2) == 'PP')
     if(is_bound(0,2)) then
       if(impose_norm_bc)  call set_bc(cbc(0,2,2),0,2,nh,.false.,bcv%y,dl(2),v)
-      if(lwm(0,2)==0) then    
                           call set_bc(cbc(0,2,1),0,2,nh,.true. ,bcu%y,dl(2),u)
                           call set_bc(cbc(0,2,3),0,2,nh,.true. ,bcw%y,dl(2),w)
-      end if
     end if
     if(is_bound(1,2)) then
       if(impose_norm_bc)  call set_bc(cbc(1,2,2),1,2,nh,.false.,bcv%y,dl(2),v)
-      if(lwm(1,2)==0) then    
                           call set_bc(cbc(1,2,1),1,2,nh,.true. ,bcu%y,dl(2),u)
                           call set_bc(cbc(1,2,3),1,2,nh,.true. ,bcw%y,dl(2),w)
-      end if
     end if
     impose_norm_bc = (.not.is_correc).or.(cbc(0,3,3)//cbc(1,3,3) == 'PP')
     if(is_bound(0,3)) then
       if(impose_norm_bc)  call set_bc(cbc(0,3,3),0,3,nh,.false.,bcw%z,dzf(0)   ,w)
-      if(lwm(0,3)==0) then     
                           call set_bc(cbc(0,3,1),0,3,nh,.true. ,bcu%z,dzc(0)   ,u)
                           call set_bc(cbc(0,3,2),0,3,nh,.true. ,bcv%z,dzc(0)   ,v)
-      end if
     end if
     if(is_bound(1,3)) then
       if(impose_norm_bc)  call set_bc(cbc(1,3,3),1,3,nh,.false.,bcw%z,dzf(n(3)),w)
-      if(lwm(1,3)==0) then    
                           call set_bc(cbc(1,3,1),1,3,nh,.true. ,bcu%z,dzc(n(3)),u)
                           call set_bc(cbc(1,3,2),1,3,nh,.true. ,bcv%z,dzc(n(3)),v)
-      end if
     end if
     !
     ! Neumann bc must be zero at some locations to let the ghost points have the same
@@ -117,40 +99,100 @@ module mod_bound
     ! updt_wallmodelbcs, ~25% of bounduvw time is saved, equivalent to ~1% of the total time,
     ! The computational cost of the log-law wall model is negligible.
     !
-    if(is_updt_wm) then
-      call updt_wallmodelbcs(n,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                            bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag)
-    end if
+    ! if(is_updt_wm) then
+    !   call updt_wallmodelbcs(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+    !                          cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+    ! end if
     !
-    if(is_bound(0,1).and.lwm(0,1)/=0) then
-      call set_bc(cbc(0,1,2),0,1,nh,.true. ,bcv%x,dl(1),v)
-      call set_bc(cbc(0,1,3),0,1,nh,.true. ,bcw%x,dl(1),w)
-    end if
-    if(is_bound(1,1).and.lwm(1,1)/=0) then
-      call set_bc(cbc(1,1,2),1,1,nh,.true. ,bcv%x,dl(1),v)
-      call set_bc(cbc(1,1,3),1,1,nh,.true. ,bcw%x,dl(1),w)
-    end if
-    if(is_bound(0,2).and.lwm(0,2)/=0) then
-      call set_bc(cbc(0,2,1),0,2,nh,.true. ,bcu%y,dl(2),u)
-      call set_bc(cbc(0,2,3),0,2,nh,.true. ,bcw%y,dl(2),w)
-    end if
-    if(is_bound(1,2).and.lwm(1,2)/=0) then
-      call set_bc(cbc(1,2,1),1,2,nh,.true. ,bcu%y,dl(2),u)
-      call set_bc(cbc(1,2,3),1,2,nh,.true. ,bcw%y,dl(2),w)
-    end if
-    if(is_bound(0,3).and.lwm(0,3)/=0) then
-      call set_bc(cbc(0,3,1),0,3,nh,.true. ,bcu%z,dzc(0)   ,u)
-      call set_bc(cbc(0,3,2),0,3,nh,.true. ,bcv%z,dzc(0)   ,v)
-    end if
-    if(is_bound(1,3).and.lwm(1,3)/=0) then
-      call set_bc(cbc(1,3,1),1,3,nh,.true. ,bcu%z,dzc(n(3)),u)
-      call set_bc(cbc(1,3,2),1,3,nh,.true. ,bcv%z,dzc(n(3)),v)
-    end if
+    ! if(is_bound(0,1).and.lwm(0,1)/=0) then
+    !   call set_bc(cbc(0,1,2),0,1,nh,.true. ,bcv%x,dl(1),v)
+    !   call set_bc(cbc(0,1,3),0,1,nh,.true. ,bcw%x,dl(1),w)
+    ! end if
+    ! if(is_bound(1,1).and.lwm(1,1)/=0) then
+    !   call set_bc(cbc(1,1,2),1,1,nh,.true. ,bcv%x,dl(1),v)
+    !   call set_bc(cbc(1,1,3),1,1,nh,.true. ,bcw%x,dl(1),w)
+    ! end if
+    ! if(is_bound(0,2).and.lwm(0,2)/=0) then
+    !   call set_bc(cbc(0,2,1),0,2,nh,.true. ,bcu%y,dl(2),u)
+    !   call set_bc(cbc(0,2,3),0,2,nh,.true. ,bcw%y,dl(2),w)
+    ! end if
+    ! if(is_bound(1,2).and.lwm(1,2)/=0) then
+    !   call set_bc(cbc(1,2,1),1,2,nh,.true. ,bcu%y,dl(2),u)
+    !   call set_bc(cbc(1,2,3),1,2,nh,.true. ,bcw%y,dl(2),w)
+    ! end if
+    ! if(is_bound(0,3).and.lwm(0,3)/=0) then
+    !   call set_bc(cbc(0,3,1),0,3,nh,.true. ,bcu%z,dzc(0)   ,u)
+    !   call set_bc(cbc(0,3,2),0,3,nh,.true. ,bcv%z,dzc(0)   ,v)
+    ! end if
+    ! if(is_bound(1,3).and.lwm(1,3)/=0) then
+    !   call set_bc(cbc(1,3,1),1,3,nh,.true. ,bcu%z,dzc(n(3)),u)
+    !   call set_bc(cbc(1,3,2),1,3,nh,.true. ,bcv%z,dzc(n(3)),v)
+    ! end if
     !
     ! for square duct/six-wall cases, further add a loop for the end locations
     ! if all values of uh,vh and wh need to be correct at the end locations.
     ! This need should never arise.
     !
+    ! we update only the boundary conditions after the wall model bc's are set.
+    ! With this treatment, it should be enough for the wall model computations
+    ! to be performed for only the internal points, i.e., 1:n(1), 1:n(2) and 1:n(3).
+! #if !defined(_OPENACC)
+!     do idir = 1,3
+!       call updthalo(nh,halo(idir),nb(:,idir),idir,u)
+!       call updthalo(nh,halo(idir),nb(:,idir),idir,v)
+!       call updthalo(nh,halo(idir),nb(:,idir),idir,w)
+!     end do
+! #else
+!     call updthalo_gpu(nh,cbc(0,:,1)//cbc(1,:,1)==['PP','PP','PP'],u)
+!     call updthalo_gpu(nh,cbc(0,:,2)//cbc(1,:,2)==['PP','PP','PP'],v)
+!     call updthalo_gpu(nh,cbc(0,:,3)//cbc(1,:,3)==['PP','PP','PP'],w)
+! #endif
+!     !
+!     impose_norm_bc = (.not.is_correc).or.(cbc(0,1,1)//cbc(1,1,1) == 'PP')
+!     if(is_bound(0,1)) then
+!       if(impose_norm_bc)  call set_bc(cbc(0,1,1),0,1,nh,.false.,bcu%x,dl(1),u)
+!       if(lwm(0,1)==0) then
+!                           call set_bc(cbc(0,1,2),0,1,nh,.true. ,bcv%x,dl(1),v)
+!                           call set_bc(cbc(0,1,3),0,1,nh,.true. ,bcw%x,dl(1),w)
+!       end if
+!     end if
+!     if(is_bound(1,1)) then
+!       if(impose_norm_bc)  call set_bc(cbc(1,1,1),1,1,nh,.false.,bcu%x,dl(1),u)
+!       if(lwm(1,1)==0) then
+!                           call set_bc(cbc(1,1,2),1,1,nh,.true. ,bcv%x,dl(1),v)
+!                           call set_bc(cbc(1,1,3),1,1,nh,.true. ,bcw%x,dl(1),w)
+!       end if
+!     end if
+!     impose_norm_bc = (.not.is_correc).or.(cbc(0,2,2)//cbc(1,2,2) == 'PP')
+!     if(is_bound(0,2)) then
+!       if(impose_norm_bc)  call set_bc(cbc(0,2,2),0,2,nh,.false.,bcv%y,dl(2),v)
+!       if(lwm(0,2)==0) then
+!                           call set_bc(cbc(0,2,1),0,2,nh,.true. ,bcu%y,dl(2),u)
+!                           call set_bc(cbc(0,2,3),0,2,nh,.true. ,bcw%y,dl(2),w)
+!       end if
+!     end if
+!     if(is_bound(1,2)) then
+!       if(impose_norm_bc)  call set_bc(cbc(1,2,2),1,2,nh,.false.,bcv%y,dl(2),v)
+!       if(lwm(1,2)==0) then
+!                           call set_bc(cbc(1,2,1),1,2,nh,.true. ,bcu%y,dl(2),u)
+!                           call set_bc(cbc(1,2,3),1,2,nh,.true. ,bcw%y,dl(2),w)
+!       end if
+!     end if
+!     impose_norm_bc = (.not.is_correc).or.(cbc(0,3,3)//cbc(1,3,3) == 'PP')
+!     if(is_bound(0,3)) then
+!       if(impose_norm_bc)  call set_bc(cbc(0,3,3),0,3,nh,.false.,bcw%z,dzf(0)   ,w)
+!       if(lwm(0,3)==0) then
+!                           call set_bc(cbc(0,3,1),0,3,nh,.true. ,bcu%z,dzc(0)   ,u)
+!                           call set_bc(cbc(0,3,2),0,3,nh,.true. ,bcv%z,dzc(0)   ,v)
+!       end if
+!     end if
+!     if(is_bound(1,3)) then
+!       if(impose_norm_bc)  call set_bc(cbc(1,3,3),1,3,nh,.false.,bcw%z,dzf(n(3)),w)
+!       if(lwm(1,3)==0) then
+!                           call set_bc(cbc(1,3,1),1,3,nh,.true. ,bcu%z,dzc(n(3)),u)
+!                           call set_bc(cbc(1,3,2),1,3,nh,.true. ,bcv%z,dzc(n(3)),v)
+!       end if
+!     end if
   end subroutine bounduvw
   !
   subroutine boundp(cbc,n,bcp,nb,is_bound,dl,dzc,p)
@@ -723,7 +765,7 @@ module mod_bound
   end subroutine updthalo_gpu
 #endif
   !
-  subroutine initbc(sgstype,cbcvel,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
+  subroutine initbc(sgstype,cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
                     bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc)
     !
     ! initialize bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag,bcuf,bcvf,bcwf
@@ -731,6 +773,7 @@ module mod_bound
     implicit none
     character(len=*), intent(in) :: sgstype
     character(len=1), intent(inout), dimension(0:1,3,3) :: cbcvel
+    character(len=1), intent(in), dimension(0:1,3) :: cbcpre,cbcsgs
     real(rp)   , intent(in), dimension(0:1,3,3) :: bcvel
     real(rp)   , intent(in), dimension(0:1,3) :: bcpre,bcsgs
     type(Bound), intent(inout) :: bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag,bcuf,bcvf,bcwf

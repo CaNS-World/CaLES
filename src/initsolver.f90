@@ -8,7 +8,7 @@
 module mod_initsolver
   use, intrinsic :: iso_c_binding, only: C_PTR
   use mod_fft    , only: fftini
-  use mod_typedef, only: bound
+  use mod_typedef, only: Bound
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private

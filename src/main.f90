@@ -64,7 +64,8 @@ program cales
                                  rkcoeff,small, &
                                  datadir, &
                                  read_input, &
-                                 sgstype,lwm,hwm
+                                 sgstype,lwm,hwm, &
+                                 tag,action_interval,restart_file
   use mod_sanity         , only: test_sanity_input
 #if !defined(_OPENACC)
   use mod_solver         , only: solver
@@ -82,8 +83,9 @@ program cales
   use mod_updatep        , only: updatep
   use mod_utils          , only: bulk_mean
   use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
-  use mod_typedef        , only: bound
-  use mod_smartredis     , only: FinalizeSmartRedis
+  use mod_typedef        , only: Bound
+  use mod_wallmodel      , only: wallmodel
+  use mod_smartredis     , only: put_step_type,finalize_smartredis
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
   real(rp), allocatable, dimension(:,:,:) :: u,v,w,p,pp,visct
@@ -127,7 +129,7 @@ program cales
   character(len=4  ) :: chkptnum
   character(len=100) :: filename
   integer :: i,j,k,kk
-  logical :: is_done,kill
+  logical :: is_done,kill,is_updt_wm
   character(len=1) :: ctmp
   !
   call MPI_INIT(ierr)
@@ -291,7 +293,7 @@ program cales
   !
   ! initialize boundary condition variables
   !
-  call initbc(sgstype,cbcvel,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
+  call initbc(sgstype,cbcvel,cbcpre,cbcsgs,bcvel,bcpre,bcsgs,bcu,bcv,bcw,bcp,bcs,bcu_mag,bcv_mag,bcw_mag, &
               bcuf,bcvf,bcwf,n,is_bound,lwm,l,zc,dl,dzc)
   !$acc enter data copyin(bcu,bcu%x,bcu%y,bcu%z) async
   !$acc enter data copyin(bcv,bcv%x,bcv%y,bcv%z) async
@@ -352,8 +354,8 @@ program cales
 #endif
 #endif
   !
-  ! write(ctmp,'(i1)') myid
-  ! open(55,file=trim(datadir)//'debug'//trim(ctmp),status='replace')
+  write(ctmp,'(i1)') myid
+  open(55,file=trim(datadir)//'debug'//trim(ctmp),status='replace')
   if(.not.restart) then
     istep = 0
     time = 0.
@@ -361,13 +363,24 @@ program cales
                   is_forced,velf,bforce,is_wallturb,u,v,w,p)
     if(myid == 0) print*, '*** Initial condition succesfully set ***'
   else
-    call load_all('r',trim(datadir)//'fld.bin',MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
+    ! call load_all('r',trim(datadir)//'fld.bin',MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
+    call load_all('r',restart_file,MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
     if(myid == 0) print*, '*** Checkpoint loaded at time = ', time, 'time step = ', istep, '. ***'
   end if
   !$acc enter data copyin(u,v,w,p) create(pp,visct) async
   !$acc wait
-  call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                visc,hwm,.true.,.false.,u,v,w)
+  ! do j = 0,n(2)+1
+  !   do i = 0,n(1)+1
+  !     u(i,j,:) = i**2*1.0 + (j-0.5)**2*0.5
+  !     v(i,j,:) = 0.0
+  !   end do
+  ! end do
+  call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
+  if(any(lwm(0:1,1:3) /= 0)) then
+    call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                   cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+    call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
+  end if
   call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
   call cmpt_sgs(sgstype,n,ng,lo,hi,cbcvel,cbcsgs,bcs,nb,is_bound,lwm,l,dl,dli,zc,zf,dzc,dzf, &
                 dzci,dzfi,visc,hwm,u,v,w,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,visct)
@@ -392,7 +405,8 @@ program cales
     include 'out3d.h90'
   end if
   call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-  dt = min(cfl*dtmax,dtmin)
+  ! dt = min(cfl*dtmax,dtmin)
+  dt = dtmin
   if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
   dti = 1./dt
   kill = .false.
@@ -489,15 +503,24 @@ program cales
 #endif
 #endif
       dpdl(:) = dpdl(:) + f(:) ! dt multiplied
-      call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                    visc,hwm,.true.,.false.,u,v,w)
+      call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
+      if(any(lwm(0:1,1:3) /= 0).and..false.) then
+        call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+        call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
+      end if
       call fillps(n,dli,dzfi,dtrki,u,v,w,pp)
       call updt_rhs_b(['c','c','c'],cbcpre,n,is_bound,rhsbp%x,rhsbp%y,rhsbp%z,pp)
       call solver(n,ng,arrplanp,normfftp,lambdaxyp,ap,bp,cp,cbcpre,['c','c','c'],pp)
       call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,pp)
       call correc(n,dli,dzci,dtrk,pp,u,v,w)
-      call bounduvw(cbcvel,n,bcu,bcv,bcw,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf, &
-                    visc,hwm,.true.,.true.,u,v,w)
+      call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
+      ! mod(istep,action_interval) == 0
+      if(any(lwm(0:1,1:3) /= 0).and.(irk == 3)) then
+        call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+        call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
+      end if
       call updatep(n,dli,dzci,dzfi,alpha,pp,p)
       call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
       call cmpt_sgs(sgstype,n,ng,lo,hi,cbcvel,cbcsgs,bcs,nb,is_bound,lwm,l,dl,dli,zc,zf,dzc,dzf, &
@@ -523,7 +546,8 @@ program cales
       ! set icheck=1 to verify restart
       if(myid == 0) print*, 'Checking stability and divergence...'
       call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-      dt = min(cfl*dtmax,dtmin)
+      ! dt = min(cfl*dtmax,dtmin)
+      dt = dtmin
       if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
       if(dtmax < small) then
         if(myid == 0) print*, 'ERROR: time step is too small.'
@@ -627,6 +651,6 @@ program cales
 #endif
   if(myid == 0.and.(.not.kill)) print*, '*** Fim ***'
   call decomp_2d_finalize
-  call FinalizeSmartRedis()
+  call finalize_smartredis
   call MPI_FINALIZE(ierr)
 end program cales

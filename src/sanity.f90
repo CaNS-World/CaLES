@@ -23,8 +23,7 @@ module mod_sanity
 #else
   use mod_solver_gpu, only: solver => solver_gpu
 #endif
-  use mod_wallmodel , only: updt_wallmodelbcs
-  use mod_typedef   , only: bound
+  use mod_typedef   , only: Bound
   use mod_precision , only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
@@ -209,9 +208,9 @@ module mod_sanity
     passed_loc = .true.
     do idir = 1,3
       do i = 0,1
-        if(lwm(i,idir)/=0) then
+        if(lwm(i,idir) /= 0) then
           do ivel = 1,3
-            passed_loc = passed_loc.and.cbcvel(i,idir,ivel)=='D'
+            passed_loc = passed_loc.and.cbcvel(i,idir,ivel) == 'D'
           end do
         end if
       end do
@@ -221,12 +220,12 @@ module mod_sanity
     passed = passed.and.passed_loc
     !
     passed_loc = .true.
-    if(is_bound(0,1).and.lwm(0,1)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(1) .and.hwm<(n(1)-0.5_rp)*dl(1))
-    if(is_bound(1,1).and.lwm(1,1)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(1) .and.hwm<(n(1)-0.5_rp)*dl(1))
-    if(is_bound(0,2).and.lwm(0,2)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(2) .and.hwm<(n(2)-0.5_rp)*dl(2))
-    if(is_bound(1,2).and.lwm(1,2)/=0) passed_loc = passed_loc.and.(hwm>0.5_rp*dl(2) .and.hwm<(n(2)-0.5_rp)*dl(2))
-    if(is_bound(0,3).and.lwm(0,3)/=0) passed_loc = passed_loc.and.(hwm>zc(1)        .and.hwm<zc(n(3))  )
-    if(is_bound(1,3).and.lwm(1,3)/=0) passed_loc = passed_loc.and.(hwm>l(3)-zc(n(3)).and.hwm<l(3)-zc(1))
+    if(is_bound(0,1).and.lwm(0,1) /= 0) passed_loc = passed_loc.and.(hwm > 0.5_rp*dl(1) .and.hwm < (n(1)-0.5_rp)*dl(1))
+    if(is_bound(1,1).and.lwm(1,1) /= 0) passed_loc = passed_loc.and.(hwm > 0.5_rp*dl(1) .and.hwm < (n(1)-0.5_rp)*dl(1))
+    if(is_bound(0,2).and.lwm(0,2) /= 0) passed_loc = passed_loc.and.(hwm > 0.5_rp*dl(2) .and.hwm < (n(2)-0.5_rp)*dl(2))
+    if(is_bound(1,2).and.lwm(1,2) /= 0) passed_loc = passed_loc.and.(hwm > 0.5_rp*dl(2) .and.hwm < (n(2)-0.5_rp)*dl(2))
+    if(is_bound(0,3).and.lwm(0,3) /= 0) passed_loc = passed_loc.and.(hwm > zc(1)        .and.hwm < zc(n(3))  )
+    if(is_bound(1,3).and.lwm(1,3) /= 0) passed_loc = passed_loc.and.(hwm > l(3)-zc(n(3)).and.hwm < l(3)-zc(1))
     if(.not.passed_loc) print*, 'ERROR: invalid wall model height.'
     passed = passed.and.passed_loc
     !
@@ -255,8 +254,8 @@ module mod_sanity
     passed = passed.and.passed_loc
     !
     passed_loc = .true.
-    passed_loc = passed_loc.and.( lwm(0,1)==0.and.lwm(1,1)==0.and. &
-                                  lwm(0,2)==0.and.lwm(1,2)==0 )
+    passed_loc = passed_loc.and.(lwm(0,1) == 0.and.lwm(1,1) == 0.and. &
+                                 lwm(0,2) == 0.and.lwm(1,2) == 0 )
     if(myid == 0.and.(.not.passed_loc)) &
       print*, 'ERROR: wall model BCs cannot be used in x and y directions when 3D implicit diffusion is applied.'
     passed = passed.and.passed_loc

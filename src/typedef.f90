@@ -12,4 +12,14 @@ module mod_typedef
     real(rp), allocatable, dimension(:,:,:) :: y
     real(rp), allocatable, dimension(:,:,:) :: z
   end type Bound
+  type BoundProfile
+    real(rp), allocatable, dimension(:,:,:,:) :: x
+    real(rp), allocatable, dimension(:,:,:,:) :: y
+    real(rp), allocatable, dimension(:,:,:,:) :: z
+  end type BoundProfile
+  type BoundInteger
+    integer, allocatable, dimension(:,:,:) :: x
+    integer, allocatable, dimension(:,:,:) :: y
+    integer, allocatable, dimension(:,:,:) :: z
+  end type BoundInteger
 end module mod_typedef

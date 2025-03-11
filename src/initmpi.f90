@@ -60,7 +60,7 @@ module mod_initmpi
     is_bound(:,:) = .false.
     !
     if(product(dims)==0.and.nprocs>=2.and.trim(sgstype)=='smag') then
-      call calc_dims(cbcvel,sgstype,ipencil_t,nprocs,dims)
+      call calc_dims(cbcvel,sgstype,ipencil_t,dims)
       if(myid == 0) then
         print*, 'In auto-tuning mode......'
         print*, 'p_row x p_col',dims(1),dims(2)

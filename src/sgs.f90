@@ -11,7 +11,7 @@ module mod_sgs
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_common_mpi, only: ierr
   use mod_params, only: c_smag,big
-  use mod_typedef, only: bound
+  use mod_typedef, only: Bound
   use mod_bound, only: boundp,bounduvw
   implicit none
   private
@@ -48,7 +48,7 @@ module mod_sgs
     real(rp), intent(in )                        :: visc,hwm
     real(rp), intent(in ), dimension(0:,0:,0:)   :: u,v,w
     real(rp), intent(out), dimension(0:,0:,0:)   :: visct
-    real(rp), allocatable, dimension(:,:,:)  , save :: s0,uc,vc,wc,uf,vf,wf,alph2
+    real(rp), allocatable, dimension(:,:,:), save:: s0,uc,vc,wc,uf,vf,wf,alph2
     real(rp), target,  allocatable, dimension(:,:,:,:), save :: wk,sij,mij
     real(rp), pointer, contiguous , dimension(:,:,:,:), save :: lij
     real(rp) :: dxi,dyi,visci,tauw(2),dw(6),dw_plus, &
@@ -150,234 +150,234 @@ module mod_sgs
           end do
         end do
       end do
-    case('dsmag')
-      if(is_first) then
-        is_first = .false.
-        allocate(uc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 vc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 wc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 uf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 vf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 wf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 s0 (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
-                 wk (0:n(1)+1,0:n(2)+1,0:n(3)+1,6), &
-                 sij(0:n(1)+1,0:n(2)+1,0:n(3)+1,6), &
-                 mij(0:n(1)+1,0:n(2)+1,0:n(3)+1,6))
-        allocate(alph2(0:n(1)+1,0:n(2)+1,0:n(3)+1))
-        !$acc enter data create(uc,vc,wc,uf,vf,wf) async(1)
-        !$acc enter data create(s0,wk,sij,mij) async(1)
-        !$acc enter data create(alph2) async(1)
-        call cmpt_alph2(n,is_bound,cbcvel,alph2)
-      end if
-      !
-      !$acc kernels default(present) async(1)
-      wk(:,:,:,1) = u(:,:,:)
-      wk(:,:,:,2) = v(:,:,:)
-      wk(:,:,:,3) = w(:,:,:)
-      !$acc end kernels
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=1,lwm=lwm)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=2,lwm=lwm)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=3,lwm=lwm)
-      call strain_rate(n,dli,dzci,dzfi,wk(:,:,:,1),wk(:,:,:,2),wk(:,:,:,3),s0,sij)
-      !
-      !$acc kernels default(present) async(1)
-      visct(:,:,:) = s0(:,:,:)
-      !$acc end kernels
-      !
-      ! Mij
-      !
-      ! periodic/patched bc's are updated, wall bc ghost points are set
-      ! by extrapolation from the interior.
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,s0)
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,1))
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,2))
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,3))
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,4))
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,5))
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,6))
-      !$acc parallel loop collapse(3) default(present) async(1)
-      do k = 0,n(3)+1
-        do j = 0,n(2)+1
-          do i = 0,n(1)+1
-            wk(i,j,k,1) = s0(i,j,k)*sij(i,j,k,1)
-            wk(i,j,k,2) = s0(i,j,k)*sij(i,j,k,2)
-            wk(i,j,k,3) = s0(i,j,k)*sij(i,j,k,3)
-            wk(i,j,k,4) = s0(i,j,k)*sij(i,j,k,4)
-            wk(i,j,k,5) = s0(i,j,k)*sij(i,j,k,5)
-            wk(i,j,k,6) = s0(i,j,k)*sij(i,j,k,6)
-          end do
-        end do
-      end do
-#if !defined(_FILTER_2D)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,4),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,5),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,6),iface=0,cbc=cbcvel)
-      call filter3d(n,wk(:,:,:,1),mij(:,:,:,1))
-      call filter3d(n,wk(:,:,:,2),mij(:,:,:,2))
-      call filter3d(n,wk(:,:,:,3),mij(:,:,:,3))
-      call filter3d(n,wk(:,:,:,4),mij(:,:,:,4))
-      call filter3d(n,wk(:,:,:,5),mij(:,:,:,5))
-      call filter3d(n,wk(:,:,:,6),mij(:,:,:,6))
-      !
-      !$acc kernels default(present) async(1)
-      wk(:,:,:,1) = u(:,:,:)
-      wk(:,:,:,2) = v(:,:,:)
-      wk(:,:,:,3) = w(:,:,:)
-      !$acc end kernels
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=1,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=2,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=3,cbc=cbcvel)
-      call filter3d(n,wk(:,:,:,1),uf)
-      call filter3d(n,wk(:,:,:,2),vf)
-      call filter3d(n,wk(:,:,:,3),wf)
-#else
-      call filter2d(n,wk(:,:,:,1),mij(:,:,:,1))
-      call filter2d(n,wk(:,:,:,2),mij(:,:,:,2))
-      call filter2d(n,wk(:,:,:,3),mij(:,:,:,3))
-      call filter2d(n,wk(:,:,:,4),mij(:,:,:,4))
-      call filter2d(n,wk(:,:,:,5),mij(:,:,:,5))
-      call filter2d(n,wk(:,:,:,6),mij(:,:,:,6))
-      !
-      call filter2d(n,u,uf)
-      call filter2d(n,v,vf)
-      call filter2d(n,w,wf)
-#endif
-      ! when not using a wall model, all bc's are used for computing strain rate, and
-      ! bcv/v/wf are equal to bcu/v/w=0 for no-slip walls. When using a wall model,
-      ! wall bc's for wall-parallel velocity are not used due to extrapolation, but
-      ! the wall bc's for the wall-normal velicity are used to impose no-penetration
-      ! on the filtered velocity. Also, periodic/patched bc's are used. Hence,
-      ! there is no need to update wall model bc's in bounduvw. Filtered velocity
-      ! should satisfy the wall bc's, evidenced by the fact that each mode satisfies
-      ! the no-slip/no-penetration bc's if a spectral filter is applied.
-      call bounduvw(cbcvel,n,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm, &
-                    l,dl,zc,zf,dzc,dzf,visc,hwm,.false.,.false.,uf,vf,wf)
-      call extrapolate(n,is_bound,dzci,uf,iface=1,lwm=lwm)
-      call extrapolate(n,is_bound,dzci,vf,iface=2,lwm=lwm)
-      call extrapolate(n,is_bound,dzci,wf,iface=3,lwm=lwm)
-      call strain_rate(n,dli,dzci,dzfi,uf,vf,wf,s0,sij)
-      !$acc parallel loop collapse(3) default(present) async(1)
-      do k = 1,n(3)
-        do j = 1,n(2)
-          do i = 1,n(1)
-            !$acc loop seq
-            do m = 1,6
-              mij(i,j,k,m) = 2._rp*(mij(i,j,k,m)-alph2(i,j,k)*s0(i,j,k)*sij(i,j,k,m))
-            end do
-          end do
-        end do
-      end do
-      !
-      ! Lij, stored in sij
-      !
-      lij => sij
-      call interpolate(n,u,v,w,uc,vc,wc)
-      ! periodic/patched bc's are updated, wall bc ghost points are set
-      ! by extrapolation from the interior.
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,uc)
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,vc)
-      call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,wc)
-      !$acc parallel loop collapse(3) default(present) async(1)
-      do k = 0,n(3)+1
-        do j = 0,n(2)+1
-          do i = 0,n(1)+1
-            wk(i,j,k,1) = uc(i,j,k)*uc(i,j,k)
-            wk(i,j,k,2) = vc(i,j,k)*vc(i,j,k)
-            wk(i,j,k,3) = wc(i,j,k)*wc(i,j,k)
-            wk(i,j,k,4) = uc(i,j,k)*vc(i,j,k)
-            wk(i,j,k,5) = uc(i,j,k)*wc(i,j,k)
-            wk(i,j,k,6) = vc(i,j,k)*wc(i,j,k)
-          end do
-        end do
-      end do
-#if !defined(_FILTER_2D)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,4),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,5),iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wk(:,:,:,6),iface=0,cbc=cbcvel)
-      call filter3d(n,wk(:,:,:,1),lij(:,:,:,1))
-      call filter3d(n,wk(:,:,:,2),lij(:,:,:,2))
-      call filter3d(n,wk(:,:,:,3),lij(:,:,:,3))
-      call filter3d(n,wk(:,:,:,4),lij(:,:,:,4))
-      call filter3d(n,wk(:,:,:,5),lij(:,:,:,5))
-      call filter3d(n,wk(:,:,:,6),lij(:,:,:,6))
-      !
-      call extrapolate(n,is_bound,dzci,uc,iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,vc,iface=0,cbc=cbcvel)
-      call extrapolate(n,is_bound,dzci,wc,iface=0,cbc=cbcvel)
-      call filter3d(n,uc,uf)
-      call filter3d(n,vc,vf)
-      call filter3d(n,wc,wf)
-#else
-      call filter2d(n,wk(:,:,:,1),lij(:,:,:,1))
-      call filter2d(n,wk(:,:,:,2),lij(:,:,:,2))
-      call filter2d(n,wk(:,:,:,3),lij(:,:,:,3))
-      call filter2d(n,wk(:,:,:,4),lij(:,:,:,4))
-      call filter2d(n,wk(:,:,:,5),lij(:,:,:,5))
-      call filter2d(n,wk(:,:,:,6),lij(:,:,:,6))
-      !
-      call filter2d(n,uc,uf)
-      call filter2d(n,vc,vf)
-      call filter2d(n,wc,wf)
-#endif
-      !$acc parallel loop collapse(3) default(present) async(1) &
-      !$acc private(mij_s,lij_s)
-      do k = 1,n(3)
-        do j = 1,n(2)
-          do i = 1,n(1)
-            !
-            mij_s = mij(i,j,k,1:6)
-            lij_s = lij(i,j,k,1:6)
-            !
-            lij_s(1) = lij_s(1) - uf(i,j,k)*uf(i,j,k)
-            lij_s(2) = lij_s(2) - vf(i,j,k)*vf(i,j,k)
-            lij_s(3) = lij_s(3) - wf(i,j,k)*wf(i,j,k)
-            lij_s(4) = lij_s(4) - uf(i,j,k)*vf(i,j,k)
-            lij_s(5) = lij_s(5) - uf(i,j,k)*wf(i,j,k)
-            lij_s(6) = lij_s(6) - vf(i,j,k)*wf(i,j,k)
-            !
-            wk(i,j,k,1) = mij_s(1)*lij_s(1) + &
-                          mij_s(2)*lij_s(2) + &
-                          mij_s(3)*lij_s(3) + &
-                         (mij_s(4)*lij_s(4) + &
-                          mij_s(5)*lij_s(5) + &
-                          mij_s(6)*lij_s(6))*2._rp
-            wk(i,j,k,2) = mij_s(1)*mij_s(1) + &
-                          mij_s(2)*mij_s(2) + &
-                          mij_s(3)*mij_s(3) + &
-                         (mij_s(4)*mij_s(4) + &
-                          mij_s(5)*mij_s(5) + &
-                          mij_s(6)*mij_s(6))*2._rp
-          end do
-        end do
-      end do
-#if defined(_DIT)
-      call ave0d_dit(ng,lo,hi,l,dl,dzf,wk(:,:,:,1))
-      call ave0d_dit(ng,lo,hi,l,dl,dzf,wk(:,:,:,2))
-#elif defined(_CHANNEL)
-      call ave1d_channel(ng,lo,hi,3,l,dl,dzf,wk(:,:,:,1))
-      call ave1d_channel(ng,lo,hi,3,l,dl,dzf,wk(:,:,:,2))
-#elif defined(_DUCT)
-      call ave2d_duct(ng,lo,hi,1,l,dl,dzf,wk(:,:,:,1))
-      call ave2d_duct(ng,lo,hi,1,l,dl,dzf,wk(:,:,:,2))
-#elif defined(_CAVITY)
-      !
-#endif
-      ! cs = (c_smag*del)^2
-      !$acc parallel loop collapse(3) default(present) async(1)
-      do k = 1,n(3)
-        do j = 1,n(2)
-          do i = 1,n(1)
-            visct(i,j,k) = visct(i,j,k)*wk(i,j,k,1)/wk(i,j,k,2)
-            visct(i,j,k) = max(visct(i,j,k),0._rp)
-          end do
-        end do
-      end do
+!     case('dsmag')
+!       if(is_first) then
+!         is_first = .false.
+!         allocate(uc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  vc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  wc (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  uf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  vf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  wf (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  s0 (0:n(1)+1,0:n(2)+1,0:n(3)+1  ), &
+!                  wk (0:n(1)+1,0:n(2)+1,0:n(3)+1,6), &
+!                  sij(0:n(1)+1,0:n(2)+1,0:n(3)+1,6), &
+!                  mij(0:n(1)+1,0:n(2)+1,0:n(3)+1,6))
+!         allocate(alph2(0:n(1)+1,0:n(2)+1,0:n(3)+1))
+!         !$acc enter data create(uc,vc,wc,uf,vf,wf) async(1)
+!         !$acc enter data create(s0,wk,sij,mij) async(1)
+!         !$acc enter data create(alph2) async(1)
+!         call cmpt_alph2(n,is_bound,cbcvel,alph2)
+!       end if
+!       !
+!       !$acc kernels default(present) async(1)
+!       wk(:,:,:,1) = u(:,:,:)
+!       wk(:,:,:,2) = v(:,:,:)
+!       wk(:,:,:,3) = w(:,:,:)
+!       !$acc end kernels
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=1,lwm=lwm)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=2,lwm=lwm)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=3,lwm=lwm)
+!       call strain_rate(n,dli,dzci,dzfi,wk(:,:,:,1),wk(:,:,:,2),wk(:,:,:,3),s0,sij)
+!       !
+!       !$acc kernels default(present) async(1)
+!       visct(:,:,:) = s0(:,:,:)
+!       !$acc end kernels
+!       !
+!       ! Mij
+!       !
+!       ! periodic/patched bc's are updated, wall bc ghost points are set
+!       ! by extrapolation from the interior.
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,s0)
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,1))
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,2))
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,3))
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,4))
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,5))
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,sij(:,:,:,6))
+!       !$acc parallel loop collapse(3) default(present) async(1)
+!       do k = 0,n(3)+1
+!         do j = 0,n(2)+1
+!           do i = 0,n(1)+1
+!             wk(i,j,k,1) = s0(i,j,k)*sij(i,j,k,1)
+!             wk(i,j,k,2) = s0(i,j,k)*sij(i,j,k,2)
+!             wk(i,j,k,3) = s0(i,j,k)*sij(i,j,k,3)
+!             wk(i,j,k,4) = s0(i,j,k)*sij(i,j,k,4)
+!             wk(i,j,k,5) = s0(i,j,k)*sij(i,j,k,5)
+!             wk(i,j,k,6) = s0(i,j,k)*sij(i,j,k,6)
+!           end do
+!         end do
+!       end do
+! #if !defined(_FILTER_2D)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,4),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,5),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,6),iface=0,cbc=cbcvel)
+!       call filter3d(n,wk(:,:,:,1),mij(:,:,:,1))
+!       call filter3d(n,wk(:,:,:,2),mij(:,:,:,2))
+!       call filter3d(n,wk(:,:,:,3),mij(:,:,:,3))
+!       call filter3d(n,wk(:,:,:,4),mij(:,:,:,4))
+!       call filter3d(n,wk(:,:,:,5),mij(:,:,:,5))
+!       call filter3d(n,wk(:,:,:,6),mij(:,:,:,6))
+!       !
+!       !$acc kernels default(present) async(1)
+!       wk(:,:,:,1) = u(:,:,:)
+!       wk(:,:,:,2) = v(:,:,:)
+!       wk(:,:,:,3) = w(:,:,:)
+!       !$acc end kernels
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=1,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=2,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=3,cbc=cbcvel)
+!       call filter3d(n,wk(:,:,:,1),uf)
+!       call filter3d(n,wk(:,:,:,2),vf)
+!       call filter3d(n,wk(:,:,:,3),wf)
+! #else
+!       call filter2d(n,wk(:,:,:,1),mij(:,:,:,1))
+!       call filter2d(n,wk(:,:,:,2),mij(:,:,:,2))
+!       call filter2d(n,wk(:,:,:,3),mij(:,:,:,3))
+!       call filter2d(n,wk(:,:,:,4),mij(:,:,:,4))
+!       call filter2d(n,wk(:,:,:,5),mij(:,:,:,5))
+!       call filter2d(n,wk(:,:,:,6),mij(:,:,:,6))
+!       !
+!       call filter2d(n,u,uf)
+!       call filter2d(n,v,vf)
+!       call filter2d(n,w,wf)
+! #endif
+!       ! when not using a wall model, all bc's are used for computing strain rate, and
+!       ! bcv/v/wf are equal to bcu/v/w=0 for no-slip walls. When using a wall model,
+!       ! wall bc's for wall-parallel velocity are not used due to extrapolation, but
+!       ! the wall bc's for the wall-normal velicity are used to impose no-penetration
+!       ! on the filtered velocity. Also, periodic/patched bc's are used. Hence,
+!       ! there is no need to update wall model bc's in bounduvw. Filtered velocity
+!       ! should satisfy the wall bc's, evidenced by the fact that each mode satisfies
+!       ! the no-slip/no-penetration bc's if a spectral filter is applied.
+!       call bounduvw(cbcvel,n,bcuf,bcvf,bcwf,bcu_mag,bcv_mag,bcw_mag,nb,is_bound,lwm, &
+!                     l,dl,zc,zf,dzc,dzf,visc,hwm,.false.,.false.,uf,vf,wf) ! this needs fixing due to the introduction of cbcsgs and bcs...
+!       call extrapolate(n,is_bound,dzci,uf,iface=1,lwm=lwm)
+!       call extrapolate(n,is_bound,dzci,vf,iface=2,lwm=lwm)
+!       call extrapolate(n,is_bound,dzci,wf,iface=3,lwm=lwm)
+!       call strain_rate(n,dli,dzci,dzfi,uf,vf,wf,s0,sij)
+!       !$acc parallel loop collapse(3) default(present) async(1)
+!       do k = 1,n(3)
+!         do j = 1,n(2)
+!           do i = 1,n(1)
+!             !$acc loop seq
+!             do m = 1,6
+!               mij(i,j,k,m) = 2._rp*(mij(i,j,k,m)-alph2(i,j,k)*s0(i,j,k)*sij(i,j,k,m))
+!             end do
+!           end do
+!         end do
+!       end do
+!       !
+!       ! Lij, stored in sij
+!       !
+!       lij => sij
+!       call interpolate(n,u,v,w,uc,vc,wc)
+!       ! periodic/patched bc's are updated, wall bc ghost points are set
+!       ! by extrapolation from the interior.
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,uc)
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,vc)
+!       call boundp(cbcsgs,n,bcs,nb,is_bound,dl,dzc,wc)
+!       !$acc parallel loop collapse(3) default(present) async(1)
+!       do k = 0,n(3)+1
+!         do j = 0,n(2)+1
+!           do i = 0,n(1)+1
+!             wk(i,j,k,1) = uc(i,j,k)*uc(i,j,k)
+!             wk(i,j,k,2) = vc(i,j,k)*vc(i,j,k)
+!             wk(i,j,k,3) = wc(i,j,k)*wc(i,j,k)
+!             wk(i,j,k,4) = uc(i,j,k)*vc(i,j,k)
+!             wk(i,j,k,5) = uc(i,j,k)*wc(i,j,k)
+!             wk(i,j,k,6) = vc(i,j,k)*wc(i,j,k)
+!           end do
+!         end do
+!       end do
+! #if !defined(_FILTER_2D)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,1),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,2),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,3),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,4),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,5),iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wk(:,:,:,6),iface=0,cbc=cbcvel)
+!       call filter3d(n,wk(:,:,:,1),lij(:,:,:,1))
+!       call filter3d(n,wk(:,:,:,2),lij(:,:,:,2))
+!       call filter3d(n,wk(:,:,:,3),lij(:,:,:,3))
+!       call filter3d(n,wk(:,:,:,4),lij(:,:,:,4))
+!       call filter3d(n,wk(:,:,:,5),lij(:,:,:,5))
+!       call filter3d(n,wk(:,:,:,6),lij(:,:,:,6))
+!       !
+!       call extrapolate(n,is_bound,dzci,uc,iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,vc,iface=0,cbc=cbcvel)
+!       call extrapolate(n,is_bound,dzci,wc,iface=0,cbc=cbcvel)
+!       call filter3d(n,uc,uf)
+!       call filter3d(n,vc,vf)
+!       call filter3d(n,wc,wf)
+! #else
+!       call filter2d(n,wk(:,:,:,1),lij(:,:,:,1))
+!       call filter2d(n,wk(:,:,:,2),lij(:,:,:,2))
+!       call filter2d(n,wk(:,:,:,3),lij(:,:,:,3))
+!       call filter2d(n,wk(:,:,:,4),lij(:,:,:,4))
+!       call filter2d(n,wk(:,:,:,5),lij(:,:,:,5))
+!       call filter2d(n,wk(:,:,:,6),lij(:,:,:,6))
+!       !
+!       call filter2d(n,uc,uf)
+!       call filter2d(n,vc,vf)
+!       call filter2d(n,wc,wf)
+! #endif
+!       !$acc parallel loop collapse(3) default(present) async(1) &
+!       !$acc private(mij_s,lij_s)
+!       do k = 1,n(3)
+!         do j = 1,n(2)
+!           do i = 1,n(1)
+!             !
+!             mij_s = mij(i,j,k,1:6)
+!             lij_s = lij(i,j,k,1:6)
+!             !
+!             lij_s(1) = lij_s(1) - uf(i,j,k)*uf(i,j,k)
+!             lij_s(2) = lij_s(2) - vf(i,j,k)*vf(i,j,k)
+!             lij_s(3) = lij_s(3) - wf(i,j,k)*wf(i,j,k)
+!             lij_s(4) = lij_s(4) - uf(i,j,k)*vf(i,j,k)
+!             lij_s(5) = lij_s(5) - uf(i,j,k)*wf(i,j,k)
+!             lij_s(6) = lij_s(6) - vf(i,j,k)*wf(i,j,k)
+!             !
+!             wk(i,j,k,1) = mij_s(1)*lij_s(1) + &
+!                           mij_s(2)*lij_s(2) + &
+!                           mij_s(3)*lij_s(3) + &
+!                          (mij_s(4)*lij_s(4) + &
+!                           mij_s(5)*lij_s(5) + &
+!                           mij_s(6)*lij_s(6))*2._rp
+!             wk(i,j,k,2) = mij_s(1)*mij_s(1) + &
+!                           mij_s(2)*mij_s(2) + &
+!                           mij_s(3)*mij_s(3) + &
+!                          (mij_s(4)*mij_s(4) + &
+!                           mij_s(5)*mij_s(5) + &
+!                           mij_s(6)*mij_s(6))*2._rp
+!           end do
+!         end do
+!       end do
+! #if defined(_DIT)
+!       call ave0d_dit(ng,lo,hi,l,dl,dzf,wk(:,:,:,1))
+!       call ave0d_dit(ng,lo,hi,l,dl,dzf,wk(:,:,:,2))
+! #elif defined(_CHANNEL)
+!       call ave1d_channel(ng,lo,hi,3,l,dl,dzf,wk(:,:,:,1))
+!       call ave1d_channel(ng,lo,hi,3,l,dl,dzf,wk(:,:,:,2))
+! #elif defined(_DUCT)
+!       call ave2d_duct(ng,lo,hi,1,l,dl,dzf,wk(:,:,:,1))
+!       call ave2d_duct(ng,lo,hi,1,l,dl,dzf,wk(:,:,:,2))
+! #elif defined(_CAVITY)
+!       !
+! #endif
+!       ! cs = (c_smag*del)^2
+!       !$acc parallel loop collapse(3) default(present) async(1)
+!       do k = 1,n(3)
+!         do j = 1,n(2)
+!           do i = 1,n(1)
+!             visct(i,j,k) = visct(i,j,k)*wk(i,j,k,1)/wk(i,j,k,2)
+!             visct(i,j,k) = max(visct(i,j,k),0._rp)
+!           end do
+!         end do
+!       end do
     case('amd')
       print*, 'ERROR: AMD model not yet implemented'
     case default
