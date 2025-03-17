@@ -31,6 +31,7 @@ program cales
   use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan
   use mpi
   use decomp_2d
+  use smartredis_mpi     , only: put_step_type,finalize_smartredis
   use mod_bound          , only: boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
   use mod_chkdiv         , only: chkdiv
   use mod_chkdt          , only: chkdt
@@ -85,7 +86,6 @@ program cales
   use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: Bound
   use mod_wallmodel      , only: wallmodel
-  use mod_smartredis     , only: put_step_type,finalize_smartredis
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
   real(rp), allocatable, dimension(:,:,:) :: u,v,w,p,pp,visct

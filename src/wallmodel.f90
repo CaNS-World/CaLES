@@ -17,9 +17,9 @@ module mod_wallmodel
   !   end if
   ! end block
   use mpi
+  use smartredis_mpi, only: init_smartredis,put_step_type,put_state,put_reward,get_action
   use mod_precision, only: rp
   use mod_typedef, only: Bound,BoundProfile,BoundInteger
-  use mod_smartredis, only: init_smartredis,put_step_type,put_state,put_reward,get_action
   use mod_params, only: kap_log,b_log,eps,tag,db_clustered, &
                         total_time_steps,agent_interval,action_interval
   use mod_bound, only: boundp
