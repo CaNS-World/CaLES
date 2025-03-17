@@ -17,7 +17,7 @@ module mod_wallmodel
   !   end if
   ! end block
   use mpi
-  use smartredis_mpi, only: init_smartredis,put_step_type,put_state,put_reward,get_action
+  use smartredis_mpi, only: init_smartredis_mpi,put_step_type,put_state,put_reward,get_action
   use mod_precision, only: rp
   use mod_typedef, only: Bound,BoundProfile,BoundInteger
   use mod_params, only: kap_log,b_log,eps,tag,db_clustered, &
@@ -884,7 +884,7 @@ module mod_wallmodel
     if(is_first) then
       is_first = .false.
       istep = 0 ! starting from 0 even when the simulation is restarted
-      call init_smartredis(db_clustered)
+      call init_smartredis_mpi(db_clustered,MPI_COMM_WORLD)
       n_points      = size(inputs_array ,1)
       n_vars_state  = size(inputs_array ,2)
       n_vars_action = size(outputs_array,2)

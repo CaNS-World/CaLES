@@ -31,7 +31,7 @@ program cales
   use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan
   use mpi
   use decomp_2d
-  use smartredis_mpi     , only: put_step_type,finalize_smartredis
+  use smartredis_mpi     , only: finalize_smartredis_mpi
   use mod_bound          , only: boundp,bounduvw,cmpt_rhs_b,updt_rhs_b,initbc
   use mod_chkdiv         , only: chkdiv
   use mod_chkdt          , only: chkdt
@@ -651,6 +651,6 @@ program cales
 #endif
   if(myid == 0.and.(.not.kill)) print*, '*** Fim ***'
   call decomp_2d_finalize
-  call finalize_smartredis
+  call finalize_smartredis_mpi
   call MPI_FINALIZE(ierr)
 end program cales
