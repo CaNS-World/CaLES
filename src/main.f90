@@ -66,7 +66,7 @@ program cales
                                  datadir, &
                                  read_input, &
                                  sgstype,lwm,hwm, &
-                                 tag,action_interval,restart_file
+                                 tag,action_interval
   use mod_sanity         , only: test_sanity_input
 #if !defined(_OPENACC)
   use mod_solver         , only: solver
@@ -85,7 +85,7 @@ program cales
   use mod_utils          , only: bulk_mean
   use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: Bound
-  use mod_wallmodel      , only: wallmodel
+  use mod_wallmodel      , only: compute_and_apply_wall_stress
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
   real(rp), allocatable, dimension(:,:,:) :: u,v,w,p,pp,visct
@@ -354,8 +354,8 @@ program cales
 #endif
 #endif
   !
-  write(ctmp,'(i1)') myid
-  open(55,file=trim(datadir)//'debug'//trim(ctmp),status='replace')
+  ! write(ctmp,'(i1)') myid
+  ! open(55,file=trim(datadir)//'debug'//trim(ctmp),status='replace')
   if(.not.restart) then
     istep = 0
     time = 0.
@@ -363,22 +363,16 @@ program cales
                   is_forced,velf,bforce,is_wallturb,u,v,w,p)
     if(myid == 0) print*, '*** Initial condition succesfully set ***'
   else
-    ! call load_all('r',trim(datadir)//'fld.bin',MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
-    call load_all('r',restart_file,MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
+    call load_all('r',trim(datadir)//'fld.bin',MPI_COMM_WORLD,ng,[1,1,1],lo,hi,u,v,w,p,time,istep)
     if(myid == 0) print*, '*** Checkpoint loaded at time = ', time, 'time step = ', istep, '. ***'
   end if
   !$acc enter data copyin(u,v,w,p) create(pp,visct) async
   !$acc wait
-  ! do j = 0,n(2)+1
-  !   do i = 0,n(1)+1
-  !     u(i,j,:) = i**2*1.0 + (j-0.5)**2*0.5
-  !     v(i,j,:) = 0.0
-  !   end do
-  ! end do
+
   call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   if(any(lwm(0:1,1:3) /= 0)) then
-    call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                   cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+    call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
     call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   end if
   call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
@@ -405,8 +399,8 @@ program cales
     include 'out3d.h90'
   end if
   call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-  ! dt = min(cfl*dtmax,dtmin)
-  dt = dtmin
+  dt = min(cfl*dtmax,dtmin)
+  ! dt = dtmin
   if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
   dti = 1./dt
   kill = .false.
@@ -505,8 +499,8 @@ program cales
       dpdl(:) = dpdl(:) + f(:) ! dt multiplied
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       if(any(lwm(0:1,1:3) /= 0).and..false.) then
-        call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+        call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       end if
       call fillps(n,dli,dzfi,dtrki,u,v,w,pp)
@@ -515,10 +509,9 @@ program cales
       call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,pp)
       call correc(n,dli,dzci,dtrk,pp,u,v,w)
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
-      ! mod(istep,action_interval) == 0
       if(any(lwm(0:1,1:3) /= 0).and.(irk == 3)) then
-        call wallmodel(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+        call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
+                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
       end if
       call updatep(n,dli,dzci,dzfi,alpha,pp,p)
@@ -546,8 +539,8 @@ program cales
       ! set icheck=1 to verify restart
       if(myid == 0) print*, 'Checking stability and divergence...'
       call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-      ! dt = min(cfl*dtmax,dtmin)
-      dt = dtmin
+      dt = min(cfl*dtmax,dtmin)
+      ! dt = dtmin
       if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
       if(dtmax < small) then
         if(myid == 0) print*, 'ERROR: time step is too small.'
