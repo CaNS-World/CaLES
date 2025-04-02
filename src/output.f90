@@ -67,7 +67,6 @@ module mod_output
     integer , intent(in) :: idir
     real(rp), intent(in), dimension(3) :: l,dl
     real(rp), intent(in), dimension(0:) :: z_g
-    ! real(rp), intent(in), dimension(0:lo(3)-1) :: dz
     real(rp), intent(in), dimension(lo(3)-1:) :: dz
     real(rp), intent(in), dimension(lo(1)-1:,lo(2)-1:,lo(3)-1:) :: p
     real(dp), allocatable, dimension(:) :: p1d
