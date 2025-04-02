@@ -117,43 +117,47 @@ module mod_wallmodel
     integer, allocatable, dimension(:)     :: seed
     integer :: i, j, k, i1, i2, j1, j2, k1, k2, ncells
 
-    if(is_bound(0, 1).and.lwm(0, 1) /= 0) then ! to remove statement
+    if (is_bound(0, 1) .and. lwm(0, 1) /= 0) then ! to remove statement
       i = 1
-      do while((i - 0.5) * dl(1) < hwm)
+      do while ((i - 0.5) * dl(1) < hwm)
         i = i + 1
       end do
       i2 = i
       i1 = i - 1
       hwm_idx(0, 1) = i2
     end if
-    if(is_bound(1, 1).and.lwm(1, 1) /= 0) then
+
+    if (is_bound(1, 1) .and. lwm(1, 1) /= 0) then
       i = n(1)
-      do while((n(1) - i + 0.5) * dl(1) < hwm)
+      do while ((n(1) - i + 0.5) * dl(1) < hwm)
         i = i - 1
       end do
       i2 = i
       i1 = i + 1
       hwm_idx(1, 1) = i2
     end if
-    if(is_bound(0, 2).and.lwm(0, 2) /= 0) then
+
+    if (is_bound(0, 2) .and. lwm(0, 2) /= 0) then
       j = 1
-      do while((j - 0.5) * dl(2) < hwm)
+      do while ((j - 0.5) * dl(2) < hwm)
         j = j + 1
       end do
       j2 = j
       j1 = j - 1
       hwm_idx(0, 2) = j2
     end if
-    if(is_bound(1, 2).and.lwm(1, 2) /= 0) then
+
+    if (is_bound(1, 2) .and. lwm(1, 2) /= 0) then
       j = n(2)
-      do while((n(2) - j + 0.5) * dl(2) < hwm)
+      do while ((n(2) - j + 0.5) * dl(2) < hwm)
         j = j - 1
       end do
       j2 = j
       j1 = j + 1
       hwm_idx(1, 2) = j2
     end if
-    if(is_bound(0, 3).and.lwm(0, 3) /= 0) then
+
+    if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
       ncells = n(1) * n(2)
       call random_seed(size = ncells)
       allocate(seed(ncells))
@@ -161,10 +165,11 @@ module mod_wallmodel
       call random_seed(put = seed)
       call random_number(wall_state%hwm%z(1:n(1), 1:n(2), 0))
       wall_state%hwm%z(1:n(1), 1:n(2), 0) = 0.075_rp + (0.150_rp - 0.075_rp) * wall_state%hwm%z(1:n(1), 1:n(2), 0)
+      
       do j = 1, n(2)
         do i = 1, n(1)
           k = 1
-          do while(zc(k) < wall_state%hwm%z(i, j, 0))
+          do while (zc(k) < wall_state%hwm%z(i, j, 0))
             k = k + 1
           end do
           k2 = k
@@ -173,19 +178,21 @@ module mod_wallmodel
         end do
       end do
     end if
-    if(is_bound(1, 3).and.lwm(1, 3) /= 0) then
+
+    if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
       ncells = n(1) * n(2)
       call random_seed(size = ncells)
-      if(allocated(seed)) deallocate(seed)
+      if (allocated(seed)) deallocate(seed)
       allocate(seed(ncells))
       seed = 123
       call random_seed(put = seed)
       call random_number(wall_state%hwm%z(1:n(1), 1:n(2), 1))
       wall_state%hwm%z(1:n(1), 1:n(2), 1) = 0.075_rp + (0.150_rp - 0.075_rp) * wall_state%hwm%z(1:n(1), 1:n(2), 1)
+      
       do j = 1, n(2)
         do i = 1, n(1)
           k = n(3)
-          do while(l(3) - zc(k) < wall_state%hwm%z(i, j, 1))
+          do while (l(3) - zc(k) < wall_state%hwm%z(i, j, 1))
             k = k - 1
           end do
           k2 = k
@@ -231,7 +238,7 @@ module mod_wallmodel
 
     real(rp) :: tmp, tmp2
 
-    if(is_first) then
+    if (is_first) then
       is_first = .false.
       
       wallmodel_dispatch_table(WM_LOG)%ptr => wallmodel_loglaw
@@ -262,12 +269,12 @@ module mod_wallmodel
       n_points_y = (n(1)/interval(1)) * (n(3)/interval(3))
       n_points_z = (n(1)/interval(1)) * (n(2)/interval(2))
       
-      if(is_bound(0, 1) .and. lwm(0, 1) /= 0) n_points = n_points + n_points_x
-      if(is_bound(1, 1) .and. lwm(1, 1) /= 0) n_points = n_points + n_points_x
-      if(is_bound(0, 2) .and. lwm(0, 2) /= 0) n_points = n_points + n_points_y
-      if(is_bound(1, 2) .and. lwm(1, 2) /= 0) n_points = n_points + n_points_y
-      if(is_bound(0, 3) .and. lwm(0, 3) /= 0) n_points = n_points + n_points_z
-      if(is_bound(1, 3) .and. lwm(1, 3) /= 0) n_points = n_points + n_points_z
+      if (is_bound(0, 1) .and. lwm(0, 1) /= 0) n_points = n_points + n_points_x
+      if (is_bound(1, 1) .and. lwm(1, 1) /= 0) n_points = n_points + n_points_x
+      if (is_bound(0, 2) .and. lwm(0, 2) /= 0) n_points = n_points + n_points_y
+      if (is_bound(1, 2) .and. lwm(1, 2) /= 0) n_points = n_points + n_points_y
+      if (is_bound(0, 3) .and. lwm(0, 3) /= 0) n_points = n_points + n_points_z
+      if (is_bound(1, 3) .and. lwm(1, 3) /= 0) n_points = n_points + n_points_z
 
       allocate(flattened_state%vel1(n_points));    flattened_state%vel1    = 0._rp
       allocate(flattened_state%vel2(n_points));    flattened_state%vel2    = 0._rp
@@ -295,24 +302,24 @@ module mod_wallmodel
     call compute_wall_data(n, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, hwm_idx, &
                            u, v, w, bcu_mag, bcv_mag, bcw_mag, wall_state, performance_metric)
 
-    if(mod(istep, action_interval) == 0) then
+    if (mod(istep, action_interval) == 0) then
 
       i_point = 1
-      if(is_bound(0, 3).and.lwm(0, 3) /= 0) then
+      if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
         call coarsen_and_flatten_wall_data(wall_state, performance_metric, flattened_state, &
                                            flattened_metric, n, interval, 0, n_points_z, &
                                            i_point)
         i_point = i_point + n_points_z
       end if
 
-      if(is_bound(1, 3).and.lwm(1, 3) /= 0) then
+      if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
         call coarsen_and_flatten_wall_data(wall_state, performance_metric, flattened_state, &
                                            flattened_metric, n, interval, 1, n_points_z, &
                                            i_point)
         i_point = i_point + n_points_z
       end if
       
-      if(i_point /= n_points + 1) then
+      if (i_point /= n_points + 1) then
         print*, 'ERROR: i_point /= n_points + 1.'
       end if
 
@@ -320,23 +327,23 @@ module mod_wallmodel
       call wallmodel_dispatch_table(mtype)%ptr(visc, hwm, flattened_state, flattened_stress, flattened_metric)
 
       i_point = 1
-      if(is_bound(0, 3).and.lwm(0, 3) /= 0) then
+      if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
         flattened_metric%vel1_profile_err(i_point:i_point+n_points_z-1) = flattened_stress%tauw1(i_point:i_point+n_points_z-1)
         i_point = i_point + n_points_z
       end if
 
-      if(is_bound(1, 3).and.lwm(1, 3) /= 0) then
+      if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
         flattened_metric%vel1_profile_err(i_point:i_point+n_points_z-1) = flattened_stress%tauw1(i_point:i_point+n_points_z-1)
         i_point = i_point + n_points_z
       end if
 
       i_point = 1
-      if(is_bound(0, 3).and.lwm(0, 3) /= 0) then
+      if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
         call map_stress_to_sparse_grid(flattened_stress, stress_field, n, interval, 0, n_points_z, i_point)
         i_point = i_point + n_points_z
       end if
 
-      if(is_bound(1, 3).and.lwm(1, 3) /= 0) then
+      if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
         call map_stress_to_sparse_grid(flattened_stress, stress_field, n, interval, 1, n_points_z, i_point)
         i_point = i_point + n_points_z
       end if
@@ -400,16 +407,16 @@ module mod_wallmodel
     real(rp) :: coef, wei, u1, u2, v1, v2, w1, w2, u_mag, v_mag, w_mag, uh, vh, wh, this_hwm
     integer  :: i1, i2, j1, j2, k1, k2, i, j, k, ibound, idir, cell_index
     logical, save  :: is_first = .true.
-    integer, save  :: istep, num_samples
+    integer, save  :: istep, n_samples
     real(rp), allocatable, save :: u_ref(:), u_ref_0(:), u_ref_1(:), u_profile(:)
     real(rp), allocatable, save :: u_profile_ave(:,:,:,:)
     real(rp) :: dummy
     integer  :: ierr
     
     if (is_first) then
-      is_first      = .false.
-      istep         = 0
-      num_samples   = 1
+      is_first   = .false.
+      istep      = 0
+      n_samples  = 1
       performance_metric%vel1%z = 0._rp
       allocate(u_ref_0(n(3)))
       allocate(u_ref_1(n(3)))
@@ -419,17 +426,17 @@ module mod_wallmodel
       allocate(u_profile(n(3)))
     else
       istep       = istep + 1
-      num_samples = num_samples + 1
+      n_samples = n_samples + 1
     end if
     if (mod(istep, action_interval) == 1) then
-      num_samples = 1
+      n_samples = 1
       performance_metric%vel1%z = 0._rp
       u_profile_ave = 0._rp
     end if
 
     do idir = 1, 3
       do ibound = 0, 1
-        if(is_bound(ibound, idir).and.lwm(ibound, idir) /= 0) then
+        if (is_bound(ibound, idir) .and. lwm(ibound, idir) /= 0) then
 
           select case(idir)
           case(3)
@@ -437,7 +444,7 @@ module mod_wallmodel
               do i = 1, n(1)
                 cell_index = wall_state%hwm_idx%z(i, j, ibound)
                 this_hwm = wall_state%hwm%z(i, j, ibound)
-                if(ibound == 0) then
+                if (ibound == 0) then
                   k2 = cell_index
                   k1 = cell_index - 1
                   coef = (this_hwm - zc(k1)) / dzc(k1)
@@ -460,13 +467,13 @@ module mod_wallmodel
                 wall_state%vel2%z(i, j, ibound) = vh
                 wall_state% vel%z(i, j, ibound) = sqrt(uh**2 + vh**2)
                 wall_state%visc%z(i, j, ibound) = visc * 20000._rp
-                performance_metric%vel1%z(i, j, ibound) = ((num_samples - 1) / float(num_samples)) * performance_metric%vel1%z(i, j, ibound) + &
-                                                          (               1  / float(num_samples)) * uh
+                performance_metric%vel1%z(i, j, ibound) = ((n_samples - 1) / float(n_samples)) * performance_metric%vel1%z(i, j, ibound) + &
+                                                          (               1  / float(n_samples)) * uh
                 u_profile = 0.5_rp * (u(i - 1, j, 1:n(3)) + u(i, j, 1:n(3)))
-                u_profile_ave(:, i, j, ibound) = ((num_samples - 1) / float(num_samples)) * u_profile_ave(:, i, j, ibound) + &
-                                                 (1                 / float(num_samples)) * u_profile
+                u_profile_ave(:, i, j, ibound) = ((n_samples - 1) / float(n_samples)) * u_profile_ave(:, i, j, ibound) + &
+                                                 (1                 / float(n_samples)) * u_profile
                 performance_metric%vel1_profile_err%z(i, j, ibound) = sum(dzf(1:n(3)) * (u_profile_ave(:, i, j, ibound) - u_ref)**2)
-                if(ibound == 0) then
+                if (ibound == 0) then
                   performance_metric%vel1_profile%z(:, i, j, ibound) = u_profile_ave(1:n(3)   , i, j, ibound)
                 else
                   performance_metric%vel1_profile%z(:, i, j, ibound) = u_profile_ave(n(3):1:-1, i, j, ibound)
@@ -489,7 +496,7 @@ module mod_wallmodel
     integer :: nx, ny, ierr
     
     visci = 1._rp / visc
-    if(ibound == 0) then
+    if (ibound == 0) then
       sgn =  1._rp
     else
       sgn = -1._rp
@@ -524,7 +531,7 @@ module mod_wallmodel
       upar = sqrt(u1**2 + u2**2)
       utau = max(sqrt(upar / this_hwm * visc), visc / this_hwm * exp(-kap_log * b_log))
       conv = 1._rp
-      do while(conv > 0.5e-4_rp)
+      do while (conv > 0.5e-4_rp)
         utau_old = utau
         f = upar / utau - 1._rp / kap_log * log(this_hwm * utau / visc) - b_log
         fp = -1._rp / utau * (upar / utau + 1._rp / kap_log)
@@ -580,7 +587,7 @@ module mod_wallmodel
     real(rp), allocatable, dimension(:,:), save :: action
     real(rp), allocatable, dimension(:,:), save :: reward
 
-    if(is_first) then
+    if (is_first) then
       is_first = .false.
       istep = 0
       call init_smartredis_mpi(db_clustered, MPI_COMM_WORLD)
@@ -609,7 +616,7 @@ module mod_wallmodel
     
     print*, "istep = ", istep, "total_time_steps = ", total_time_steps
     call put_state(trim(adjustl(tag))//".state", shape(state_array(3:5,:)), state_array(3:5,:))
-    if(istep /= 0) then
+    if (istep /= 0) then
       call put_reward(trim(adjustl(tag))//".reward", shape(reward(1:n_vars_reward,:)), reward(1:n_vars_reward,:))
     end if
     call get_action(trim(adjustl(tag))//".action", shape(action(3,:)), action(3,:))
