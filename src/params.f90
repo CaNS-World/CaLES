@@ -7,9 +7,9 @@
 ! -
 module mod_params
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  #if defined(_OPENACC)
+#if defined(_OPENACC)
   use cudecomp
-  #endif
+#endif
   implicit none
   public
   !
