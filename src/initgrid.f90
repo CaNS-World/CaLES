@@ -6,7 +6,7 @@
 !
 ! -
 module mod_initgrid
-  use mod_params, only:pi
+  use mod_params, only: pi
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private

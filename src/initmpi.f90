@@ -10,8 +10,10 @@ module mod_initmpi
   use decomp_2d
   use mod_common_mpi, only: nprocs,myid,ierr,halo,ipencil => ipencil_axis
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-  !@acc use openacc
-  !@acc use cudecomp
+#if defined(_OPENACC)
+  use openacc
+  use cudecomp
+#endif
   !@cuf use cudafor, only: cudaGetDeviceCount,cudaSetDevice
 #if defined(_OPENACC)
   use mod_common_cudecomp, only: cudecomp_real_rp, &
@@ -25,7 +27,9 @@ module mod_initmpi
   implicit none
   private
   public initmpi
-  !@acc integer, parameter :: CUDECOMP_RANK_NULL = -1
+#if defined(_OPENACC)
+  integer, parameter :: CUDECOMP_RANK_NULL = -1
+#endif
   contains
   subroutine initmpi(ng,dims,sgstype,cbcvel,cbcpre,lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z,nb,is_bound)
     implicit none

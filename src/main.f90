@@ -52,7 +52,7 @@ program cales
                                  write_visu_2d,write_visu_3d,out2d_duct
   use mod_params         , only: ng,l,dl,dli, &
                                  gtype,gr, &
-                                 cfl,dtmin, &
+                                 cfl,dtmax,dt_f, &
                                  visc, &
                                  inivel,is_wallturb, &
                                  nstep,time_max,tw_max,stop_type, &
@@ -83,6 +83,9 @@ program cales
 #endif
   use mod_updatep        , only: updatep
   use mod_utils          , only: bulk_mean
+#if defined(_OPENACC)
+  use mod_utils          , only: device_memory_footprint
+#endif
   use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: Bound
   use mod_wallmodel      , only: compute_and_apply_wall_stress
@@ -114,7 +117,7 @@ program cales
   type(Bound) :: rhsbu,rhsbv,rhsbw ! implicit scheme
   real(rp), allocatable, dimension(:,:,:) :: rhsbx,rhsby,rhsbz
 #endif
-  real(rp) :: dt,dti,dtmax,time,dtrk,dtrki,divtot,divmax
+  real(rp) :: dt,dti,dt_cfl,time,dtrk,dtrki,divtot,divmax
   integer :: irk,istep
   real(rp), allocatable, dimension(:) :: dzc  ,dzf  ,zc  ,zf  ,dzci  ,dzfi, &
                                          dzc_g,dzf_g,zc_g,zf_g,dzci_g,dzfi_g, &
@@ -398,9 +401,8 @@ program cales
     !$acc wait(1)
     include 'out3d.h90'
   end if
-  call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-  dt = min(cfl*dtmax,dtmin)
-  ! dt = dtmin
+  call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dt_cfl)
+  dt = merge(dt_f,min(cfl*dt_cfl,dtmax),dt_f > 0.)
   if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
   dti = 1./dt
   kill = .false.
@@ -538,11 +540,10 @@ program cales
     if(icheck > 0.and.mod(istep,max(icheck,1)) == 0) then
       ! set icheck=1 to verify restart
       if(myid == 0) print*, 'Checking stability and divergence...'
-      call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
-      dt = min(cfl*dtmax,dtmin)
-      ! dt = dtmin
-      if(myid == 0) print*, 'dtmax = ', dtmax, 'dt = ', dt
-      if(dtmax < small) then
+      call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dt_cfl)
+      dt = merge(dt_f,min(cfl*dt_cfl,dtmax),dt_f > 0.)
+      if(myid == 0) print*, 'dt_cfl = ', dt_cfl, 'dt = ', dt
+      if(dt_cfl < small) then
         if(myid == 0) print*, 'ERROR: time step is too small.'
         if(myid == 0) print*, 'Aborting...'
         is_done = .true.

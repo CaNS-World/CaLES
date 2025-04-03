@@ -7,7 +7,7 @@ Consider the following input file as an example of wall-modeled LES (WMLES) of a
 ng(1:3) = 128, 96, 64
 l(1:3) = 12.8, 4.8, 2.
 gtype = 6, gr = 0.
-cfl = 0.95, dtmin = 1.e5
+cfl = 0.95, dtmax = 1.e5, dt_f = -1.
 visci = 125000.
 inivel = 'poi'
 is_wallturb = T
@@ -74,13 +74,12 @@ These lines set the computational grid.
 ---
 
 ```fortran
-cfl = 0.95, dtmin = 1.e5
+cfl = 0.95, dtmax = 1.e5, dt_f = -1.
 ```
 
-This line controls the simulation time step.
+This line controls the simulation time step size.
 
-The time step is set to be equal to `min(cfl*dtmax,dtmin)`, i.e. the minimum value between `dtmin` and `cfl` times the maximum allowable time step `dtmax` (computed every `ickeck` time steps; see below).
-`dtmin` is therefore used when a constant time step, smaller than `cfl*dtmax`, is required. If not, it should be set to a high value so that the time step is dynamically adjusted to `cfl*dtmax`.
+The time step size is set to be equal to `min(cfl*dt_cfl,dtmax)` if `dt_f < 0`, and to `dt_f` otherwise. In the former case, the code prescribes the minimum value between `dtmax` and `cfl` times the maximum allowable time step `dt_cfl` (computed every `ickeck` time steps; see below). `dtmax` is therefore used when a constant time step, smaller than `cfl*dt_cfl`, is required. If not, it should be set to a high value so that the time step is dynamically adjusted to `cfl*dt_cfl`. Finally, a constant time step size time step may be forced, irrespective of the temporal stability evaluation through `dt_f`.
 
 ---
 
@@ -113,6 +112,7 @@ These lines set the initial velocity field.
 * `hdc`: half plane Poiseuille flow profile with constant pressure gradient         ; streamwise direction in `x`
 * `tgv`: three-dimensional Taylor-Green vortex
 * `tgw`: two-dimensional   Taylor-Green vortex
+* `ant`: three-dimensional Antuono vortex
 
 `is_wallturb`, if true, **superimposes a high amplitude disturbance on the initial velocity field** that effectively triggers transition to turbulence in a wall-bounded shear flow.
 
