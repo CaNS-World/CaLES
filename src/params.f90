@@ -41,7 +41,7 @@ module mod_params
   integer , protected :: total_time_steps = 1
   real(rp), protected :: t_begin_control = 0._rp
   real(rp), protected :: f_action
-  real(rp), protected :: t_episode
+  real(rp), protected :: tauw_ref
   character(len=500), protected :: restart_file
   !
   ! input file
@@ -166,6 +166,9 @@ module mod_params
       else if(adjustl(trim(arg(:pos-1))) == "--f_action") then
         arg_val = trim(adjustl(arg(pos+1:)))
         read(arg_val,*) f_action
+      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) tauw_ref
       else
         if(myid == 0) print*, 'Error unknown command-line argument'
         if(myid == 0) print*, 'Aborting...'
