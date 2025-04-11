@@ -8,7 +8,7 @@
 module mod_initflow
   use mpi
   use mod_common_mpi, only: ierr,myid
-  use mod_params, only: pi
+  use mod_params, only: pi,kap_log,b_log
   use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
   implicit none
   private
@@ -401,8 +401,9 @@ module mod_initflow
     do k=1,n
       z = zc(k)*2.*retau
       if(z >= retau) z = 2.*retau-z
-      p(k) = 2.5*log(z) + 5.5
+      p(k) = 1.0/kap_log*log(z)+b_log
       if (z <= 11.6) p(k)=z
+      ! p(k) = p(k)*2.0*retau/reb
     end do
   end subroutine log_profile
   !
