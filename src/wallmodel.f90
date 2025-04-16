@@ -9,13 +9,15 @@ module mod_wallmodel
   use, intrinsic :: ieee_arithmetic, only: is_nan => ieee_is_nan, is_finite => ieee_is_finite
   use, intrinsic :: ieee_exceptions, only: ieee_get_flag, ieee_set_flag, ieee_underflow
   use mpi
+  use mod_common_mpi, only: ierr,myid
   use smartredis_mpi, only: init_smartredis_mpi, put_step_type, put_state, &
                             put_reward, get_action
   use mod_precision, only: rp
   use mod_typedef,   only: Bound, BoundProfile, BoundInteger
   use mod_params,    only: kap_log, b_log, eps, tag, db_clustered, &
-                           total_time_steps, agent_interval, action_interval, &
-                           tauw_ref
+                           agent_interval, action_interval, &
+                           hwm_min, hwm_max, tauw_ref_min, tauw_ref_max, &
+                           cfd_seed
   use mod_bound,     only: boundp
   implicit none
   private
@@ -170,7 +172,7 @@ module mod_wallmodel
     call random_seed(size = seed_size)
     allocate(seed(seed_size))
     do k = 1, seed_size
-      seed(k) = 12345 + k
+      seed(k) = cfd_seed + k + myid * 100
     end do
     call random_seed(put = seed)
 
@@ -178,7 +180,7 @@ module mod_wallmodel
 
     if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
       call random_number(random_values)
-      state%hwm%z(1:n(1), 1:n(2), 0) = 0.075_rp + 0.075_rp * random_values
+      state%hwm%z(1:n(1), 1:n(2), 0) = hwm_min + random_values * (hwm_max - hwm_min)
       
       do j = 1, n(2)
         do i = 1, n(1)
@@ -195,7 +197,7 @@ module mod_wallmodel
 
     if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
       call random_number(random_values)
-      state%hwm%z(1:n(1), 1:n(2), 1) = 0.075_rp + 0.075_rp * random_values
+      state%hwm%z(1:n(1), 1:n(2), 1) = hwm_min + random_values * (hwm_max - hwm_min)
       
       do j = 1, n(2)
         do i = 1, n(1)
@@ -246,7 +248,7 @@ module mod_wallmodel
     integer, dimension(0:1, 3), save :: hwm_idx
     
     integer :: mtype, idir, ibound, cell_index
-    integer :: i, j, k, i0, i1, j0, j1, ierr, i_point, i_var
+    integer :: i, j, k, i0, i1, j0, j1, i_point, i_var
     integer :: seed_size
 
     if (is_first) then
@@ -290,18 +292,18 @@ module mod_wallmodel
       call random_seed(size = seed_size)
       allocate(seed(seed_size))
       do k = 1, seed_size
-        seed(k) = 12345 + k
+        seed(k) = cfd_seed + k + myid * 100
       end do
       call random_seed(put = seed)
 
       allocate(random_values(0:n(1)+1, 0:n(2)+1))
       call random_number(random_values(0:n(1)+1, 0:n(2)+1))
-      random_values = tauw_ref * (0.8_rp + 0.4_rp * random_values)
+      random_values = tauw_ref_min + random_values * (tauw_ref_max - tauw_ref_min)
       wall_stress%tauw1%z(0:n(1)+1, 0:n(2)+1, 0) = random_values
       wall_stress%tauw2%z(0:n(1)+1, 0:n(2)+1, 0) = 0._rp
       wall_stress%tauw %z(0:n(1)+1, 0:n(2)+1, 0) = random_values
       call random_number(random_values(0:n(1)+1, 0:n(2)+1))
-      random_values = tauw_ref * (0.8_rp + 0.4_rp * random_values)
+      random_values = tauw_ref_min + random_values * (tauw_ref_max - tauw_ref_min)
       wall_stress%tauw1%z(0:n(1)+1, 0:n(2)+1, 1) = random_values
       wall_stress%tauw2%z(0:n(1)+1, 0:n(2)+1, 1) = 0._rp
       wall_stress%tauw %z(0:n(1)+1, 0:n(2)+1, 1) = random_values
@@ -354,7 +356,6 @@ module mod_wallmodel
       istep = istep + 1
     end if
 
-    ! wall_stress saved from the last step
     call compute_wall_data(n, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, hwm_idx, &
                            u, v, w, bcu_mag, bcv_mag, bcw_mag, wall_state, wall_stress, &
                            performance_metric)
@@ -378,6 +379,19 @@ module mod_wallmodel
 
       if (i_point /= n_points + 1) then
         print*, 'ERROR: i_point /= n_points + 1.'
+      end if
+
+      ! State of wall shear stress, s_n
+      if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
+        wall_stress%tauw1_prev%z(:,:,0) = wall_stress%tauw1%z(:,:,0)
+        wall_stress%tauw2_prev%z(:,:,0) = wall_stress%tauw2%z(:,:,0)
+        wall_stress%tauw_prev %z(:,:,0) = wall_stress%tauw %z(:,:,0)
+      end if
+
+      if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
+        wall_stress%tauw1_prev%z(:,:,1) = wall_stress%tauw1%z(:,:,1)
+        wall_stress%tauw2_prev%z(:,:,1) = wall_stress%tauw2%z(:,:,1)
+        wall_stress%tauw_prev %z(:,:,1) = wall_stress%tauw %z(:,:,1)
       end if
 
       mtype = maxval(lwm(0:1, 1:3))
@@ -415,19 +429,14 @@ module mod_wallmodel
         call boundp(cbcsgs, n, bcs, nb, is_bound, dl, dzc, stress_field(:,:,:,i_var))
       end do
 
+      ! State of wall shear stress, s_n+1
       if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
-        wall_stress%tauw1_prev%z(:,:,0) = wall_stress%tauw1%z(:,:,0)
-        wall_stress%tauw2_prev%z(:,:,0) = wall_stress%tauw2%z(:,:,0)
-        wall_stress%tauw_prev %z(:,:,0) = wall_stress%tauw %z(:,:,0)
         wall_stress%tauw1%z(:,:,0) = stress_field(:,:,1   ,1)
         wall_stress%tauw2%z(:,:,0) = stress_field(:,:,1   ,2)
         wall_stress%tauw %z(:,:,0) = stress_field(:,:,1   ,3)
       end if
 
       if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
-        wall_stress%tauw1_prev%z(:,:,1) = wall_stress%tauw1%z(:,:,1)
-        wall_stress%tauw2_prev%z(:,:,1) = wall_stress%tauw2%z(:,:,1)
-        wall_stress%tauw_prev %z(:,:,1) = wall_stress%tauw %z(:,:,1)
         wall_stress%tauw1%z(:,:,1) = stress_field(:,:,n(3),1)
         wall_stress%tauw2%z(:,:,1) = stress_field(:,:,n(3),2)
         wall_stress%tauw %z(:,:,1) = stress_field(:,:,n(3),3)
@@ -459,7 +468,7 @@ module mod_wallmodel
     type(WallStress),    intent(in) :: stress
     type(PerformanceMetric), intent(inout) :: metric
     
-    real(rp) :: coef, wei, u1, u2, v1, v2, w1, w2, u_mag, v_mag, w_mag, uh, vh, wh, this_hwm
+    real(rp) :: coef, sgn, u1, u2, v1, v2, w1, w2, u_mag, v_mag, w_mag, uh, vh, wh, this_hwm
     real(rp) :: vel_1, vel_2, vel_h, tauw1, tauw2, tauw, tauw1_prev, tauw2_prev, tauw_prev
     real(rp) :: del_v, dveldz, this_hwm_plus, vel_h_plus, dveldz_plus, kap, b, utau
     real(rp) :: s1, s2, s1_old
@@ -505,11 +514,13 @@ module mod_wallmodel
                   k1 = cell_index - 1
                   coef = (this_hwm - zc(k1)) / dzc(k1)
                   u_ref = u_ref_0
+                  sgn =  1._rp
                 else
                   k2 = cell_index
                   k1 = cell_index + 1
                   coef = (this_hwm - (l(3) - zc(k1))) / dzc(k2)
                   u_ref = u_ref_1
+                  sgn = -1._rp
                 end if
                 u1 = 0.5_rp * (u(i - 1, j, k1) + u(i, j, k1))
                 v1 = 0.5_rp * (v(i, j - 1, k1) + v(i, j, k1))
@@ -521,20 +532,25 @@ module mod_wallmodel
                 vel_2 = sqrt(u2**2 + v2**2)
                 vel_h = sqrt(uh**2 + vh**2)
                 !
-                ! Local spatial average might benefit the performance
+                ! Local spatial average should benefit the performance
                 !
-                tauw1 = stress%tauw1%z(i, j, ibound)
-                tauw2 = stress%tauw2%z(i, j, ibound)
-                tauw  = stress%tauw %z(i, j, ibound)
-                tauw1_prev = stress%tauw1_prev%z(i, j, ibound)
-                tauw2_prev = stress%tauw2_prev%z(i, j, ibound)
-                tauw_prev  = stress%tauw_prev %z(i, j, ibound)
+                tauw1_prev = stress%tauw1_prev%z(i, j, ibound) ! s_n
+                tauw2_prev = stress%tauw2_prev%z(i, j, ibound) ! s_n
+                tauw_prev  = stress%tauw_prev %z(i, j, ibound) ! s_n
+                tauw1 = stress%tauw1%z(i, j, ibound) ! s_n+1
+                tauw2 = stress%tauw2%z(i, j, ibound) ! s_n+1
+                tauw  = stress%tauw %z(i, j, ibound) ! s_n+1
                 !
-                ! Wall units based on tauw
+                ! Wall units based on tauw (not tauw1), assuming that
+                ! vel_1, vel_2 and tauw are along the same direction,
+                ! and that the velocity profile is monotonically increasing.
+                ! This is a common assumption in equilibrium wall models.
+                ! How about computing dveldz from dudz and dvdz?
+                ! Local spatial average should benefit
                 ! 
                 utau = sqrt(tauw)
                 del_v = visc/utau
-                dveldz = (vel_2 - vel_1) / (zc(k2) - zc(k1))
+                dveldz = sgn * (vel_2 - vel_1) / (zc(k2) - zc(k1))
                 this_hwm_plus = this_hwm / del_v
                 vel_h_plus = vel_h / utau
                 dveldz_plus = dveldz * del_v / utau
@@ -553,13 +569,14 @@ module mod_wallmodel
                 state%s2    %z(i, j, ibound) = s2
                 !
                 ! Reward based on tauw1 = tauw_ref and tauw2 = 0
+                ! Reward considers the wall shear stress at s_n and s_n+1
                 !
-                metric%tauw1     %z(i, j, ibound) = tauw1
-                metric%tauw2     %z(i, j, ibound) = tauw2
-                metric%tauw      %z(i, j, ibound) = tauw
-                metric%tauw1_prev%z(i, j, ibound) = tauw1_prev
-                metric%tauw2_prev%z(i, j, ibound) = tauw2_prev
-                metric%tauw_prev %z(i, j, ibound) = tauw_prev
+                metric%tauw1_prev%z(i, j, ibound) = tauw1_prev ! s_n
+                metric%tauw2_prev%z(i, j, ibound) = tauw2_prev ! s_n
+                metric%tauw_prev %z(i, j, ibound) = tauw_prev ! s_n
+                metric%tauw1     %z(i, j, ibound) = tauw1 ! s_n+1
+                metric%tauw2     %z(i, j, ibound) = tauw2 ! s_n+1
+                metric%tauw      %z(i, j, ibound) = tauw ! s_n+1
 
                 ! performance_metric%vel1%z(i, j, ibound) = ((n_samples - 1) / float(n_samples)) * performance_metric%vel1%z(i, j, ibound) + &
                 !                                           (             1  / float(n_samples)) * uh
@@ -628,21 +645,21 @@ module mod_wallmodel
     ! flattened_metric%vel1_profile(i_point:i_point+n_points_z-1, 1:n(3)) = reshape(metric%vel1_profile%z(1:n(3), 1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z, n(3)/))
   end subroutine coarsen_and_flatten_wall_data
 
-  subroutine wallmodel_loglaw(visc, hwm, state, stress, metric)
+  subroutine wallmodel_loglaw(visc, hwm, flattened_state, flattened_stress, flattened_metric)
     implicit none
     real(rp), intent(in) :: visc, hwm
-    type(FlattenedState), intent(in) :: state
-    type(FlattenedStress), intent(inout) :: stress
-    type(FlattenedMetric), intent(in), optional :: metric
+    type(FlattenedState), intent(in) :: flattened_state
+    type(FlattenedStress), intent(inout) :: flattened_stress
+    type(FlattenedMetric), intent(in), optional :: flattened_metric
     real(rp) :: u1, u2, upar, utau, conv, utau_old, f, fp, tauw_tot, tauw1, tauw2, this_hwm
     integer :: n_points, i
 
-    n_points = size(state%vel1)
+    n_points = size(flattened_state%vel1)
 
     do i = 1, n_points
-      this_hwm = state%hwm(i)
-      u1 = state%vel1(i)
-      u2 = state%vel2(i)
+      this_hwm = flattened_state%hwm(i)
+      u1 = flattened_state%vel1(i)
+      u2 = flattened_state%vel2(i)
       upar = sqrt(u1**2 + u2**2)
       utau = max(sqrt(upar / this_hwm * visc), visc / this_hwm * exp(-kap_log * b_log))
       conv = 1._rp
@@ -656,43 +673,43 @@ module mod_wallmodel
       tauw_tot = utau**2
       tauw1 = tauw_tot * u1 / (upar + eps)
       tauw2 = tauw_tot * u2 / (upar + eps)
-      stress%tauw1(i) = tauw1
-      stress%tauw2(i) = tauw2
+      flattened_stress%tauw1(i) = tauw1
+      flattened_stress%tauw2(i) = tauw2
     end do
   end subroutine wallmodel_loglaw
 
-  subroutine wallmodel_laminar(visc, hwm, state, stress, metric)
+  subroutine wallmodel_laminar(visc, hwm, flattened_state, flattened_stress, flattened_metric)
     implicit none
     real(rp), intent(in) :: visc, hwm
-    type(FlattenedState), intent(in) :: state
-    type(FlattenedStress), intent(inout) :: stress
-    type(FlattenedMetric), intent(in), optional :: metric
+    type(FlattenedState), intent(in) :: flattened_state
+    type(FlattenedStress), intent(inout) :: flattened_stress
+    type(FlattenedMetric), intent(in), optional :: flattened_metric
     real(rp) :: u1, u2, upar, umax, del, tauw_tot, tauw1, tauw2, this_hwm
     integer :: n_points, i
 
-    n_points = size(state%vel1)
+    n_points = size(flattened_state%vel1)
     del = 1._rp
 
     do i = 1, n_points
-      this_hwm = state%hwm(i)
-      u1 = state%vel1(i)
-      u2 = state%vel2(i)
+      this_hwm = flattened_state%hwm(i)
+      u1 = flattened_state%vel1(i)
+      u2 = flattened_state%vel2(i)
       upar = sqrt(u1**2 + u2**2)
       umax = upar / (this_hwm / del * (2._rp - this_hwm / del))
       tauw_tot = 2._rp / del * umax * visc
       tauw1 = tauw_tot * u1 / (upar + eps)
       tauw2 = tauw_tot * u2 / (upar + eps)
-      stress%tauw1(i) = tauw1
-      stress%tauw2(i) = tauw2
+      flattened_stress%tauw1(i) = tauw1
+      flattened_stress%tauw2(i) = tauw2
     end do
   end subroutine wallmodel_laminar
 
-  subroutine wallmodel_DRL(visc, hwm, state, stress, metric)
+  subroutine wallmodel_DRL(visc, hwm, flattened_state, flattened_stress, flattened_metric)
     implicit none
     real(rp), intent(in) :: visc, hwm
-    type(FlattenedState), intent(in) :: state
-    type(FlattenedStress), intent(inout) :: stress
-    type(FlattenedMetric), intent(in), optional :: metric
+    type(FlattenedState), intent(in) :: flattened_state
+    type(FlattenedStress), intent(inout) :: flattened_stress
+    type(FlattenedMetric), intent(in), optional :: flattened_metric
     real(rp) :: u1, u2, upar, tauw_tot, tauw1, tauw2, factor
     integer :: n_points, i
     logical, save :: is_first = .true.
@@ -702,7 +719,7 @@ module mod_wallmodel
     real(rp), allocatable, dimension(:,:), save :: drl_action
     real(rp), allocatable, dimension(:,:), save :: drl_reward
 
-    n_points = size(state%vel1)
+    n_points = size(flattened_state%vel1)
 
     if (is_first) then
       is_first = .false.
@@ -715,15 +732,17 @@ module mod_wallmodel
       istep = istep + action_interval
     end if
 
-    print*, "istep = ", istep
+    if (myid == 0) then
+      print*, "istep = ", istep
+    end if
     
-    drl_state(1, :) = state%s1
-    drl_state(2, :) = state%s2
+    drl_state(1, :) = flattened_state%s1
+    drl_state(2, :) = flattened_state%s2
     call put_state(trim(adjustl(tag))//".state", shape(drl_state), drl_state)
     !
     if (istep /= 0) then
-      drl_reward(1, :) = metric%tauw1
-      drl_reward(2, :) = metric%tauw1_prev
+      drl_reward(1, :) = flattened_metric%tauw1
+      drl_reward(2, :) = flattened_metric%tauw1_prev
       call put_reward(trim(adjustl(tag))//".reward", shape(drl_reward), drl_reward)
     end if
     !
@@ -731,15 +750,15 @@ module mod_wallmodel
     
     do i = 1, n_points
       factor = drl_action(1, i)
-      tauw_tot = factor * stress%tauw(i)
-      u1 = state%vel1(i)
-      u2 = state%vel2(i)
+      tauw_tot = factor * flattened_stress%tauw(i) ! tauw_n (s_n) -> tauw_n+1 (s_n+1)
+      u1 = flattened_state%vel1(i)
+      u2 = flattened_state%vel2(i)
       upar = sqrt(u1**2 + u2**2)
       tauw1 = tauw_tot * u1 / (upar + eps)
       tauw2 = tauw_tot * u2 / (upar + eps)
-      stress%tauw1(i) = tauw1
-      stress%tauw2(i) = tauw2
-      stress%tauw (i) = tauw_tot
+      flattened_stress%tauw1(i) = tauw1 ! tauw_n+1 (s_n+1)
+      flattened_stress%tauw2(i) = tauw2 ! tauw_n+1 (s_n+1)
+      flattened_stress%tauw (i) = tauw_tot ! tauw_n+1 (s_n+1)
     end do
   end subroutine wallmodel_DRL
 
@@ -787,7 +806,7 @@ module mod_wallmodel
     type(WallStress), intent(in) :: stress
     type(Bound), intent(inout) :: bcu, bcv, bcw
     real(rp) :: visci, sgn
-    integer :: nx, ny, ierr
+    integer :: nx, ny
     
     visci = 1._rp / visc
     if (ibound == 0) then

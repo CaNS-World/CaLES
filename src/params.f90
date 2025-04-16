@@ -38,10 +38,11 @@ module mod_params
   logical , protected :: db_clustered = .false.
   integer , protected :: action_interval = 1
   integer , protected :: agent_interval = 1
-  integer , protected :: total_time_steps = 1
-  real(rp), protected :: t_begin_control = 0._rp
-  real(rp), protected :: f_action
-  real(rp), protected :: tauw_ref
+  real(rp), protected :: tauw_ref_min
+  real(rp), protected :: tauw_ref_max
+  real(rp), protected :: hwm_min
+  real(rp), protected :: hwm_max
+  integer , protected :: cfd_seed = 12345
   character(len=500), protected :: restart_file
   !
   ! input file
@@ -157,18 +158,21 @@ module mod_params
       else if(adjustl(trim(arg(:pos-1))) == "--agent_interval") then
         arg_val = trim(adjustl(arg(pos+1:)))
         read(arg_val,*) agent_interval
-      else if(adjustl(trim(arg(:pos-1))) == "--total_time_steps") then
+      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_min") then
         arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) total_time_steps
-      else if(adjustl(trim(arg(:pos-1))) == "--t_begin_control") then
+        read(arg_val,*) tauw_ref_min
+      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_max") then
         arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) t_begin_control
-      else if(adjustl(trim(arg(:pos-1))) == "--f_action") then
+        read(arg_val,*) tauw_ref_max
+      else if(adjustl(trim(arg(:pos-1))) == "--hwm_min") then
         arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) f_action
-      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref") then
+        read(arg_val,*) hwm_min
+      else if(adjustl(trim(arg(:pos-1))) == "--hwm_max") then
         arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) tauw_ref
+        read(arg_val,*) hwm_max
+      else if(adjustl(trim(arg(:pos-1))) == "--cfd_seed") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) cfd_seed
       else
         if(myid == 0) print*, 'Error unknown command-line argument'
         if(myid == 0) print*, 'Aborting...'
