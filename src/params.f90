@@ -28,9 +28,9 @@ module mod_params
                                                             25._rp/60._rp, -17._rp/60._rp, &
                                                             45._rp/60._rp, -25._rp/60._rp], shape(rkcoeff))
   real(rp), parameter, dimension(3)   :: rkcoeff12 = rkcoeff(1,:)+rkcoeff(2,:)
-  real(rp), parameter :: kap_log = 0.41_rp
-  real(rp), parameter :: b_log   = 5.20_rp
-  real(rp), parameter :: c_smag  = 0.11_rp
+  real(rp), protected :: kap_log = 0.41_rp
+  real(rp), protected :: b_log   = 5.20_rp
+  real(rp), protected :: c_smag  = 0.11_rp
   !
   ! command-line arguments
   !
@@ -173,6 +173,9 @@ module mod_params
       else if(adjustl(trim(arg(:pos-1))) == "--cfd_seed") then
         arg_val = trim(adjustl(arg(pos+1:)))
         read(arg_val,*) cfd_seed
+      else if(adjustl(trim(arg(:pos-1))) == "--kap_log") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) kap_log
       else
         if(myid == 0) print*, 'Error unknown command-line argument'
         if(myid == 0) print*, 'Aborting...'
