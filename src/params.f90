@@ -38,10 +38,10 @@ module mod_params
   logical , protected :: db_clustered = .false.
   integer , protected :: action_interval = 1
   integer , protected :: agent_interval = 1
-  real(rp), protected :: tauw_ref_min
-  real(rp), protected :: tauw_ref_max
-  real(rp), protected :: hwm_min
-  real(rp), protected :: hwm_max
+  real(rp), protected :: tauw_ref_min = 0.001_rp
+  real(rp), protected :: tauw_ref_max = 0.001_rp
+  real(rp), protected :: hwm_min = 0.1_rp
+  real(rp), protected :: hwm_max = 0.1_rp
   integer , protected :: cfd_seed = 12345
   character(len=500), protected :: restart_file
   !
