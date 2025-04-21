@@ -119,8 +119,6 @@ os.makedirs(resultsdir,exist_ok=True)
 #
 sys.path.append(casedir) # put input.py in the case directory
 from input import *
-visc = visci**(-1)
-reb = 2*h*ub/visc
 tbeg   = float(args[0]) if len(args) > 0 else tbeg
 tend   = float(args[1]) if len(args) > 1 else tend
 fldstp = int(  args[2]) if len(args) > 2 else fldstp
@@ -132,10 +130,18 @@ if(shuffle_data):
     nlen = np.size(data[ind,1][np.where((tarr>tbeg) & (tarr<tend))])
     dpdx_arr = data[ind,1][np.where(tarr>tbeg)]
     np.random.shuffle(dpdx_arr[:])
+    ub_arr = data[ind,4][np.where(tarr>tbeg)]
+    np.random.shuffle(ub_arr[:])
 else:
     dpdx_arr = data[ind,1][np.where((tarr>tbeg) & (tarr<tend))]
     nlen = np.size(dpdx_arr[:])
+    ub_arr = data[ind,4][np.where((tarr>tbeg) & (tarr<tend))]
 dpdx = -np.average(dpdx_arr[0:nlen])
+ub   =  np.average(ub_arr  [0:nlen])
+print("ub = ", ub)
+#
+visc = visci**(-1)
+reb  = 2*h*ub/visc
 #
 utau = np.sqrt(dpdx*h)
 retau = utau*h/visc
@@ -147,6 +153,7 @@ print("Pressure gradient = ", dpdx)
 print("u_tau/u_bulk = ", np.sqrt(dpdx*h)/ub)
 print("dnu/h        = ", dnu/h)
 print("Friction Reynolds number = ", np.sqrt(dpdx*h)*h/visc)
+print("Bulk Reynolds number = ", reb)
 #
 # compute single point statistics
 #
