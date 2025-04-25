@@ -1,6 +1,9 @@
 <!--- the logo -->
 <img src="assets/img/CaLES-logo.png" height=*>
 
+<<<<<<< HEAD
+CaLES (Canonical Large-Eddy Simulation) is a GPU-accelerated finite-difference solver for large-eddy simulations (LES) of incompressible wall-bounded flows in massively parallel environments. Built upon the DNS solver CaNS, it employs low-storage third-order Runge-Kutta schemes for time integration and supports implicit Crank-Nicolson treatment of viscous terms. A fast direct solver based on eigenfunction expansions is used for Poisson/Helmholtz equations. CaLES implements the Smagorinsky model (with van Driest damping), the dynamic Smagorinsky model, and a logarithmic law wall model. It supports various flow configurations, including channel flows, square ducts, tri-periodic domains, and lid-driven cavities. More details can be found in the official documentation: [CaLES Documentation](https://cales-test.readthedocs.io/en/latest/).
+=======
 ## Overview
 
 **CaLES (Canonical Large-Eddy Simulation)** is a GPU-accelerated finite-difference solver designed for large-eddy simulations (LES) of incompressible wall-bounded flows in massively parallel environments. Built upon the existing direct numerical simulation (DNS) solver [CaNS](https://github.com/CaNS-World/CaNS), CaLES relies on low-storage, third-order Runge-Kutta schemes for temporal discretization, with the option to treat viscous terms via an implicit Crank-Nicolson scheme in one or three directions. A fast direct solver, based on eigenfunction expansions, is used to solve the discretized Poisson/Helmholtz equations. For turbulence modeling, the classical Smagorinsky model with van Driest near-wall damping and the dynamic Smagorinsky model are implemented, along with a logarithmic law wall model. GPU acceleration is achieved through OpenACC directives. Some examples of flows that CaLES can solve include:
@@ -104,3 +107,4 @@ To contribute to CaLES, please follow the steps listed below:
 
 Modifications to the `develop` branch are eventually merged into the master
 branch for a new release.
+>>>>>>> 2cf7d482595dc9a2b6ba78103c6ade7697d86c06

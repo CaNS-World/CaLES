@@ -14,15 +14,23 @@ cbcvel(0:1,1:3,1) = 'P','P',  'P','P',  'P','P'
 cbcvel(0:1,1:3,2) = 'P','P',  'P','P',  'P','P'
 cbcvel(0:1,1:3,3) = 'P','P',  'P','P',  'P','P'
 cbcpre(0:1,1:3)   = 'P','P',  'P','P',  'P','P'
+cbcsgs(0:1,1:3)   = 'P','P',  'P','P',  'P','P'
 bcvel(0:1,1:3,1) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,2) =  0.,0.,   0.,0.,   0.,0.
 bcvel(0:1,1:3,3) =  0.,0.,   0.,0.,   0.,0.
 bcpre(0:1,1:3)   =  0.,0.,   0.,0.,   0.,0.
+bcsgs(0:1,1:3)   =  0.,0.,   0.,0.,   0.,0.
 bforce(1:3) = 0., 0., 0.
 is_forced(1:3) = F, F, F
 velf(1:3) = 0., 0., 0.
 dims(1:2) = 1, 1
 /
+
+&les
+sgstype = 'none'
+lwm(0:1,1:3) = 0,0, 0,0, 0,0
+hwm = 0.
+\
 
 &cudecomp
 cudecomp_t_comm_backend = 0, cudecomp_is_t_enable_nccl = T, cudecomp_is_t_enable_nvshmem = T
