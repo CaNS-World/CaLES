@@ -7,7 +7,9 @@
 ! -
 module mod_param
 use mod_precision, only: rp,sp,dp,i8,MPI_REAL_RP
-!@acc use cudecomp
+#if defined(_OPENACC)
+use cudecomp
+#endif
 implicit none
 public
 !
@@ -36,7 +38,7 @@ integer , protected, dimension(3) :: ng
 real(rp), protected, dimension(3) :: l
 integer , protected :: gtype
 real(rp), protected :: gr
-real(rp), protected :: cfl,dtmin
+real(rp), protected :: cfl,dtmax,dt_f
 real(rp), protected :: visci
 !
 character(len=100), protected :: inivel
@@ -81,19 +83,20 @@ logical, protected :: cudecomp_is_t_comm_autotune ,cudecomp_is_h_comm_autotune ,
                       cudecomp_is_t_enable_nccl   ,cudecomp_is_h_enable_nccl   , &
                       cudecomp_is_t_enable_nvshmem,cudecomp_is_h_enable_nvshmem, &
                       cudecomp_is_t_in_place
-logical :: exists
 #endif
 contains
   subroutine read_input(myid)
     use mpi
     implicit none
+    character(len=*), parameter :: input_file = 'input.nml'
     integer, intent(in) :: myid
     integer :: iunit,ierr
+    character(len=1024) :: c_iomsg
     namelist /dns/ &
                   ng, &
                   l, &
                   gtype,gr, &
-                  cfl,dtmin, &
+                  cfl,dtmax,dt_f, &
                   visci, &
                   inivel, &
                   is_wallturb, &
@@ -115,15 +118,36 @@ contains
                        cudecomp_t_comm_backend,cudecomp_is_t_enable_nccl,cudecomp_is_t_enable_nvshmem, &
                        cudecomp_h_comm_backend,cudecomp_is_h_enable_nccl,cudecomp_is_h_enable_nvshmem
 #endif
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if(ierr == 0) then
-        read(iunit,nml=dns,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error reading the input file'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
+    !
+    ! defaults
+    !
+    dt_f = -1.
+    open(newunit=iunit,file=input_file,status='old',action='read',iostat=ierr,iomsg=c_iomsg)
+    if(ierr /= 0) then
+      if(myid == 0) print*, 'Error reading the input file: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
+
+    read(iunit,nml=dns,iostat=ierr,iomsg=c_iomsg)
+    if(ierr /= 0) then
+      if(myid == 0) print*, 'Error reading dns namelist: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
+    
+    read(iunit,nml=les,iostat=ierr,iomsg=c_iomsg)
+    if( ierr /= 0 ) then
+      if(myid == 0) print*, 'Error reading les namelist: ', trim(c_iomsg)
+      if(myid == 0) print*, 'Aborting...'
+      call MPI_FINALIZE(ierr)
+      close(iunit)
+      error stop
+    end if
     close(iunit)
     !
     dl(:) = l(:)/(1.*ng(:))
@@ -131,81 +155,71 @@ contains
     visc = visci**(-1)
     dx = dl(1)
     dy = dl(2)
-    !
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if( ierr == 0 ) then
-        read(iunit,nml=les,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error reading the input file'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
-    close(iunit)
 #if defined(_OPENACC)
-    !
-    ! reading cuDecomp parameters, if these are set
-    !
-    ! defaults
-    !
-    cudecomp_is_t_comm_autotune  = .true.
-    cudecomp_is_h_comm_autotune  = .true.
-    cudecomp_is_t_enable_nccl    = .true.
-    cudecomp_is_h_enable_nccl    = .true.
-    cudecomp_is_t_enable_nvshmem = .true.
-    cudecomp_is_h_enable_nvshmem = .true.
-    open(newunit=iunit,file='input.nml',status='old',action='read',iostat=ierr)
-      if(ierr == 0) then
-        read(iunit,nml=cudecomp,iostat=ierr)
-      else
-        if(myid == 0) print*, 'Error reading the input file'
+      !
+      ! reading cuDecomp parameters, if these are set
+      !
+      ! defaults
+      !
+      cudecomp_is_t_comm_autotune  = .true.
+      cudecomp_is_h_comm_autotune  = .true.
+      cudecomp_is_t_enable_nccl    = .true.
+      cudecomp_is_h_enable_nccl    = .true.
+      cudecomp_is_t_enable_nvshmem = .true.
+      cudecomp_is_h_enable_nvshmem = .true.
+      rewind(iunit)
+      read(iunit,nml=cudecomp,iostat=ierr,iomsg=c_iomsg)
+      if(ierr /= 0) then
+        if(myid == 0) print*, 'Error reading cudecomp namelist: ', trim(c_iomsg)
         if(myid == 0) print*, 'Aborting...'
         call MPI_FINALIZE(ierr)
+        close(iunit)
         error stop
       end if
-    close(iunit)
-    if(cudecomp_t_comm_backend >= 1 .and. cudecomp_t_comm_backend <= 7) then
-      cudecomp_is_t_comm_autotune = .false. ! do not autotune if backend is prescribed
-      select case(cudecomp_t_comm_backend)
-      case(1)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P
-      case(2)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P_PL
-      case(3)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_A2A
-      case(4)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NCCL
-      case(5)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NCCL_PL
-      case(6)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NVSHMEM
-      case(7)
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NVSHMEM_PL
-      case default
-        cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P
-      end select
-    end if
-    if(cudecomp_h_comm_backend >= 1 .and. cudecomp_h_comm_backend <= 4) then
-      cudecomp_is_h_comm_autotune = .false. ! do not autotune if backend is prescribed
-      select case(cudecomp_h_comm_backend)
-      case(1)
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI
-      case(2)
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI_BLOCKING
-      case(3)
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NCCL
-      case(4)
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NVSHMEM
-      case(5)
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NVSHMEM_BLOCKING
-      case default
-        cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI
-      end select
-    end if
-    !
-    ! manually set cuDecomp out-of-place transposes by default
-    !
-    cudecomp_is_t_in_place = .false.
+      !
+      if(cudecomp_t_comm_backend >= 1 .and. cudecomp_t_comm_backend <= 7) then
+        cudecomp_is_t_comm_autotune = .false. ! do not autotune if backend is prescribed
+        select case(cudecomp_t_comm_backend)
+        case(1)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P
+        case(2)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P_PL
+        case(3)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_A2A
+        case(4)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NCCL
+        case(5)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NCCL_PL
+        case(6)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NVSHMEM
+        case(7)
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_NVSHMEM_PL
+        case default
+          cudecomp_t_comm_backend = CUDECOMP_TRANSPOSE_COMM_MPI_P2P
+        end select
+      end if
+      if(cudecomp_h_comm_backend >= 1 .and. cudecomp_h_comm_backend <= 4) then
+        cudecomp_is_h_comm_autotune = .false. ! do not autotune if backend is prescribed
+        select case(cudecomp_h_comm_backend)
+        case(1)
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI
+        case(2)
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI_BLOCKING
+        case(3)
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NCCL
+        case(4)
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NVSHMEM
+        case(5)
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_NVSHMEM_BLOCKING
+        case default
+          cudecomp_h_comm_backend = CUDECOMP_HALO_COMM_MPI
+        end select
+      end if
+      !
+      ! manually set cuDecomp out-of-place transposes by default
+      !
+      cudecomp_is_t_in_place = .false.
 #endif
+    close(iunit)
   end subroutine read_input
 end module mod_param

@@ -1,6 +1,6 @@
-[submodule "dependencies/cuDecomp"]
-	path = dependencies/cuDecomp
-	url = https://github.com/soaringxmc/cuDecomp
 [submodule "dependencies/2decomp-fft"]
 	path = dependencies/2decomp-fft
 	url = https://github.com/CaNS-World/2decomp-fft
+[submodule "dependencies/cuDecomp"]
+	path = dependencies/cuDecomp
+	url = https://github.com/NVIDIA/cuDecomp.git
