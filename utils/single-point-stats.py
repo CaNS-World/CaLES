@@ -147,7 +147,7 @@ utau = np.sqrt(dpdx*h)
 retau = utau*h/visc
 dnu   = visc/utau
 cf    = utau**2/(ub**2/2.)
-np.savetxt(resultsdir+'stats.txt',np.c_[retau,utau,dnu])
+np.savetxt(resultsdir+'stats.txt',np.c_[retau,utau,dnu,reb,cf])
 #
 print("Pressure gradient = ", dpdx)
 print("u_tau/u_bulk = ", np.sqrt(dpdx*h)/ub)
