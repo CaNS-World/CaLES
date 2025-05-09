@@ -15,7 +15,7 @@ module mod_wallmodel
   use mod_precision, only: rp
   use mod_typedef,   only: Bound, BoundProfile, BoundInteger
   use mod_params,    only: kap_log, b_log, eps, tag, db_clustered, &
-                           agent_interval, action_interval, &
+                           agent_interval, action_start_time, time_duration_per_action, &
                            hwm_min, hwm_max, tauw_ref_min, tauw_ref_max, &
                            cfd_seed
   use mod_bound,     only: boundp
@@ -29,7 +29,8 @@ module mod_wallmodel
   
   type :: WallState
     type(Bound)        :: vel1, vel2, vel, hwm, visc, &
-                          s1, s2, s1_old
+                          s1, s2, s1_old, hwm_plus, vel_h_plus, &
+                          dveldz_plus, log_hwm_plus
     type(BoundInteger) :: hwm_idx
   end type WallState
 
@@ -47,7 +48,8 @@ module mod_wallmodel
 
   type :: FlattenedState
     real(rp), allocatable, dimension(:) :: vel1, vel2, vel, hwm, visc, &
-                                           s1, s2, s1_old
+                                           s1, s2, s1_old, hwm_plus, vel_h_plus, &
+                                           dveldz_plus, log_hwm_plus
     integer,  allocatable, dimension(:) :: hwm_idx
   end type FlattenedState
 
@@ -216,7 +218,7 @@ module mod_wallmodel
   end subroutine init_wallmodel_heights
 
   subroutine compute_and_apply_wall_stress(n, nb, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, u, v, w, &
-                                           cbcsgs, bcu, bcv, bcw, bcs, bcu_mag, bcv_mag, bcw_mag)
+                                           cbcsgs, bcu, bcv, bcw, bcs, bcu_mag, bcv_mag, bcw_mag, time)
     implicit none
     integer, intent(in), dimension(3)      :: n
     integer, intent(in), dimension(0:1, 3) :: nb
@@ -230,6 +232,7 @@ module mod_wallmodel
     type(Bound), intent(inout) :: bcu, bcv, bcw
     type(Bound), intent(in) :: bcs
     type(Bound), intent(in) :: bcu_mag, bcv_mag, bcw_mag
+    real(rp), intent(in) :: time
     type(WallState), save :: wall_state
     type(WallStress), save :: wall_stress
     type(PerformanceMetric), save :: performance_metric
@@ -240,19 +243,19 @@ module mod_wallmodel
     integer , allocatable, dimension(:)   :: seed
     real(rp), allocatable, dimension(:,:) :: random_values
 
-    logical, save :: is_first = .true.
-    integer, save :: istep = 0
-    
+    logical, save :: is_first = .true.    
     integer, save :: n_points, n_points_x, n_points_y, n_points_z
     integer, save :: interval(3)
     integer, dimension(0:1, 3), save :: hwm_idx
     
+    real(rp), save :: action_next_time
     integer :: mtype, idir, ibound, cell_index
     integer :: i, j, k, i0, i1, j0, j1, i_point, i_var
     integer :: seed_size
 
     if (is_first) then
       is_first = .false.
+      action_next_time = max(time, action_start_time)
       
       wallmodel_dispatch_table(WM_LOG)%ptr => wallmodel_loglaw
       wallmodel_dispatch_table(WM_LAM)%ptr => wallmodel_laminar
@@ -266,6 +269,10 @@ module mod_wallmodel
       call init_bound(wall_state%s1, n, 0._rp)
       call init_bound(wall_state%s2, n, 0._rp)
       call init_bound(wall_state%s1_old, n, 0._rp)
+      call init_bound(wall_state%hwm_plus, n, 0._rp)
+      call init_bound(wall_state%vel_h_plus, n, 0._rp)
+      call init_bound(wall_state%dveldz_plus, n, 0._rp)
+      call init_bound(wall_state%log_hwm_plus, n, 0._rp)
       call init_bound_integer(wall_state%hwm_idx, n, 0)
   
       call init_bound(wall_stress%tauw1, n, 0._rp)
@@ -286,6 +293,15 @@ module mod_wallmodel
       call init_bound_profile(performance_metric%vel1_profile, n, 0._rp)
 
       call init_wallmodel_heights(n, is_bound, lwm, l, dl, zc, hwm, hwm_idx, wall_state)
+      ! Initialize wall_stress at the previous time step
+      ! This is not used, because the computed reward is not used in the first step,
+      ! It is added to avoid uninitialized values
+      wall_stress%tauw1_prev%z(0:n(1)+1, 0:n(2)+1, 0) = 0._rp
+      wall_stress%tauw2_prev%z(0:n(1)+1, 0:n(2)+1, 0) = 0._rp
+      wall_stress%tauw_prev %z(0:n(1)+1, 0:n(2)+1, 0) = 0._rp
+      wall_stress%tauw1_prev%z(0:n(1)+1, 0:n(2)+1, 1) = 0._rp
+      wall_stress%tauw2_prev%z(0:n(1)+1, 0:n(2)+1, 1) = 0._rp
+      wall_stress%tauw_prev %z(0:n(1)+1, 0:n(2)+1, 1) = 0._rp
       !
       ! Initialize wall_stress required for the first step to compute the state
       !
@@ -322,15 +338,19 @@ module mod_wallmodel
       if (is_bound(0, 3) .and. lwm(0, 3) /= 0) n_points = n_points + n_points_z
       if (is_bound(1, 3) .and. lwm(1, 3) /= 0) n_points = n_points + n_points_z
 
-      allocate(flattened_state%vel1(n_points));    flattened_state%vel1    = 0._rp
-      allocate(flattened_state%vel2(n_points));    flattened_state%vel2    = 0._rp
-      allocate(flattened_state%vel(n_points));     flattened_state%vel     = 0._rp
-      allocate(flattened_state%hwm(n_points));     flattened_state%hwm     = 0._rp
-      allocate(flattened_state%visc(n_points));    flattened_state%visc    = 0._rp
-      allocate(flattened_state%s1(n_points));      flattened_state%s1      = 0._rp
-      allocate(flattened_state%s2(n_points));      flattened_state%s2      = 0._rp
-      allocate(flattened_state%s1_old(n_points));  flattened_state%s1_old  = 0._rp
-      allocate(flattened_state%hwm_idx(n_points)); flattened_state%hwm_idx = 0
+      allocate(flattened_state%vel1(n_points));         flattened_state%vel1          = 0._rp
+      allocate(flattened_state%vel2(n_points));         flattened_state%vel2          = 0._rp
+      allocate(flattened_state%vel(n_points));          flattened_state%vel           = 0._rp
+      allocate(flattened_state%hwm(n_points));          flattened_state%hwm           = 0._rp
+      allocate(flattened_state%visc(n_points));         flattened_state%visc          = 0._rp
+      allocate(flattened_state%s1(n_points));           flattened_state%s1            = 0._rp
+      allocate(flattened_state%s2(n_points));           flattened_state%s2            = 0._rp
+      allocate(flattened_state%s1_old(n_points));       flattened_state%s1_old        = 0._rp
+      allocate(flattened_state%hwm_plus(n_points));     flattened_state%hwm_plus      = 0._rp
+      allocate(flattened_state%vel_h_plus(n_points));   flattened_state%vel_h_plus    = 0._rp
+      allocate(flattened_state%dveldz_plus(n_points));  flattened_state%dveldz_plus   = 0._rp
+      allocate(flattened_state%log_hwm_plus(n_points)); flattened_state%log_hwm_plus  = 0._rp
+      allocate(flattened_state%hwm_idx(n_points));      flattened_state%hwm_idx = 0
 
       allocate(flattened_stress%tauw1(n_points)); flattened_stress%tauw1 = 0._rp
       allocate(flattened_stress%tauw2(n_points)); flattened_stress%tauw2 = 0._rp
@@ -345,22 +365,21 @@ module mod_wallmodel
       allocate(flattened_metric%tauw1_prev(n_points)); flattened_metric%tauw1_prev = 0._rp
       allocate(flattened_metric%tauw2_prev(n_points)); flattened_metric%tauw2_prev = 0._rp
       allocate(flattened_metric%tauw_prev(n_points));  flattened_metric%tauw_prev  = 0._rp
-      allocate(flattened_metric%vel1(n_points));               flattened_metric%vel1             = 0._rp
-      allocate(flattened_metric%vel1_profile_err(n_points));   flattened_metric%vel1_profile_err = 0._rp
-      allocate(flattened_metric%vel1_profile(n_points, n(3))); flattened_metric%vel1_profile     = 0._rp
 
       allocate(stress_field(0:n(1)+1, 0:n(2)+1, 0:n(3)+1, 3)); stress_field = 0._rp
 
-      istep = 0
-    else
-      istep = istep + 1
     end if
 
+    ! Every cfd step, compute the wall state and performance_metric, 
+    ! regardless of time_duration_per_action, so time average can be
+    ! conducted in compute_wall_data
     call compute_wall_data(n, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, hwm_idx, &
                            u, v, w, bcu_mag, bcv_mag, bcw_mag, wall_state, wall_stress, &
                            performance_metric)
 
-    if (mod(istep, action_interval) == 0) then
+    if (time + eps >= action_next_time) then
+
+      action_next_time = action_next_time + time_duration_per_action
 
       i_point = 1
       if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
@@ -441,15 +460,17 @@ module mod_wallmodel
         wall_stress%tauw2%z(:,:,1) = stress_field(:,:,n(3),2)
         wall_stress%tauw %z(:,:,1) = stress_field(:,:,n(3),3)
       end if
-
-      do idir = 1, 3
-        do ibound = 0, 1
-          if (is_bound(ibound, idir) .and. lwm(ibound, idir) /= 0) then
-            call apply_wall_stress_bc(idir, ibound, visc, wall_stress, bcu, bcv, bcw)
-          end if
-        end do
-      end do
     end if
+    ! Every cfd step, apply_wall_stress_bc, regardless of time_duration_per_action.
+    ! The initial stress is used before action_start_time, and the stress computed by 
+    ! a wall model is used from action_start_time.
+    do idir = 1, 3
+      do ibound = 0, 1
+        if (is_bound(ibound, idir) .and. lwm(ibound, idir) /= 0) then
+          call apply_wall_stress_bc(idir, ibound, visc, wall_stress, bcu, bcv, bcw)
+        end if
+      end do
+    end do
   end subroutine compute_and_apply_wall_stress
 
   subroutine compute_wall_data(n, is_bound, lwm, l, dl, zc, zf, dzc, dzf, visc, hwm, hwm_idx, u, v, w, &
@@ -473,31 +494,6 @@ module mod_wallmodel
     real(rp) :: del_v, dveldz, this_hwm_plus, vel_h_plus, dveldz_plus, kap, b, utau
     real(rp) :: s1, s2, s1_old
     integer  :: i1, i2, j1, j2, k1, k2, i, j, k, ibound, idir, cell_index
-    logical, save  :: is_first = .true.
-    integer, save  :: istep, n_samples
-    real(rp), allocatable, save :: u_ref(:), u_ref_0(:), u_ref_1(:), u_profile(:)
-    real(rp), allocatable, save :: u_profile_ave(:,:,:,:)
-    
-    if (is_first) then
-      is_first   = .false.
-      istep      = 0
-      n_samples  = 1
-      metric%vel1%z = 0._rp
-      allocate(u_ref_0(n(3)))
-      allocate(u_ref_1(n(3)))
-      allocate(u_profile_ave(n(3), n(1), n(2), 0:1))
-      u_profile_ave = 0._rp
-      allocate(u_ref(n(3)))
-      allocate(u_profile(n(3)))
-    else
-      istep       = istep + 1
-      n_samples   = n_samples + 1
-    end if
-    if (mod(istep, action_interval) == 1) then
-      n_samples = 1
-      metric%vel1%z = 0._rp
-      u_profile_ave = 0._rp
-    end if
 
     do idir = 1, 3
       do ibound = 0, 1
@@ -513,13 +509,11 @@ module mod_wallmodel
                   k2 = cell_index
                   k1 = cell_index - 1
                   coef = (this_hwm - zc(k1)) / dzc(k1)
-                  u_ref = u_ref_0
                   sgn =  1._rp
                 else
                   k2 = cell_index
                   k1 = cell_index + 1
                   coef = (this_hwm - (l(3) - zc(k1))) / dzc(k2)
-                  u_ref = u_ref_1
                   sgn = -1._rp
                 end if
                 u1 = 0.5_rp * (u(i - 1, j, k1) + u(i, j, k1))
@@ -546,6 +540,8 @@ module mod_wallmodel
                 ! and that the velocity profile is monotonically increasing.
                 ! This is a common assumption in equilibrium wall models.
                 ! How about computing dveldz from dudz and dvdz?
+                ! A more standard way is to store only distance, velocity and 
+                ! velocity gradients, interesting quantities can be computed in Python
                 ! Local spatial average should benefit
                 ! 
                 utau = sqrt(tauw)
@@ -560,35 +556,28 @@ module mod_wallmodel
                 s1 = (1._rp / kap - 1._rp / kap_log) * log(this_hwm_plus)
                 s2 = b
                 !
-                state%vel1  %z(i, j, ibound) = uh
-                state%vel2  %z(i, j, ibound) = vh
-                state%vel   %z(i, j, ibound) = vel_h
-                state%visc  %z(i, j, ibound) = visc
-                state%s1_old%z(i, j, ibound) = s1_old
-                state%s1    %z(i, j, ibound) = s1
-                state%s2    %z(i, j, ibound) = s2
+                state%vel1        %z(i, j, ibound) = uh
+                state%vel2        %z(i, j, ibound) = vh
+                state%vel         %z(i, j, ibound) = vel_h
+                state%visc        %z(i, j, ibound) = visc
+                state%s1_old      %z(i, j, ibound) = s1_old
+                state%s1          %z(i, j, ibound) = s1
+                state%s2          %z(i, j, ibound) = s2
+                state%hwm_plus    %z(i, j, ibound) = this_hwm_plus
+                state%vel_h_plus  %z(i, j, ibound) = vel_h_plus
+                state%dveldz_plus %z(i, j, ibound) = dveldz_plus
+                state%log_hwm_plus%z(i, j, ibound) = log(this_hwm_plus)
                 !
                 ! Reward based on tauw1 = tauw_ref and tauw2 = 0
                 ! Reward considers the wall shear stress at s_n and s_n+1
                 !
-                metric%tauw1_prev%z(i, j, ibound) = tauw1_prev ! s_n
-                metric%tauw2_prev%z(i, j, ibound) = tauw2_prev ! s_n
-                metric%tauw_prev %z(i, j, ibound) = tauw_prev ! s_n
-                metric%tauw1     %z(i, j, ibound) = tauw1 ! s_n+1
-                metric%tauw2     %z(i, j, ibound) = tauw2 ! s_n+1
-                metric%tauw      %z(i, j, ibound) = tauw ! s_n+1
+                metric%tauw1_prev %z(i, j, ibound) = tauw1_prev ! s_n
+                metric%tauw2_prev %z(i, j, ibound) = tauw2_prev ! s_n
+                metric%tauw_prev  %z(i, j, ibound) = tauw_prev ! s_n
+                metric%tauw1      %z(i, j, ibound) = tauw1 ! s_n+1
+                metric%tauw2      %z(i, j, ibound) = tauw2 ! s_n+1
+                metric%tauw       %z(i, j, ibound) = tauw ! s_n+1
 
-                ! performance_metric%vel1%z(i, j, ibound) = ((n_samples - 1) / float(n_samples)) * performance_metric%vel1%z(i, j, ibound) + &
-                !                                           (             1  / float(n_samples)) * uh
-                ! u_profile = 0.5_rp * (u(i - 1, j, 1:n(3)) + u(i, j, 1:n(3)))
-                ! u_profile_ave(:, i, j, ibound) = ((n_samples - 1) / float(n_samples)) * u_profile_ave(:, i, j, ibound) + &
-                !                                  (1               / float(n_samples)) * u_profile
-                ! performance_metric%vel1_profile_err%z(i, j, ibound) = sum(dzf(1:n(3)) * (u_profile_ave(:, i, j, ibound) - u_ref)**2)
-                ! if (ibound == 0) then
-                !   performance_metric%vel1_profile%z(:, i, j, ibound) = u_profile_ave(1:n(3)   , i, j, ibound)
-                ! else
-                !   performance_metric%vel1_profile%z(:, i, j, ibound) = u_profile_ave(n(3):1:-1, i, j, ibound)
-                ! end if
               end do
             end do
           end select
@@ -619,15 +608,19 @@ module mod_wallmodel
     integer, intent(in), dimension(3) :: n, interval
     integer, intent(in) :: ibound, n_points_z, i_point
     
-    flattened_state%vel1   (i_point:i_point+n_points_z-1) = reshape(state%vel1   %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%vel2   (i_point:i_point+n_points_z-1) = reshape(state%vel2   %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%vel    (i_point:i_point+n_points_z-1) = reshape(state%vel    %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%hwm    (i_point:i_point+n_points_z-1) = reshape(state%hwm    %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%visc   (i_point:i_point+n_points_z-1) = reshape(state%visc   %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%hwm_idx(i_point:i_point+n_points_z-1) = reshape(state%hwm_idx%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%s1     (i_point:i_point+n_points_z-1) = reshape(state%s1     %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%s2     (i_point:i_point+n_points_z-1) = reshape(state%s2     %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    flattened_state%s1_old (i_point:i_point+n_points_z-1) = reshape(state%s1_old %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%vel1        (i_point:i_point+n_points_z-1) = reshape(state%vel1        %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%vel2        (i_point:i_point+n_points_z-1) = reshape(state%vel2        %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%vel         (i_point:i_point+n_points_z-1) = reshape(state%vel         %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%hwm         (i_point:i_point+n_points_z-1) = reshape(state%hwm         %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%visc        (i_point:i_point+n_points_z-1) = reshape(state%visc        %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%s1          (i_point:i_point+n_points_z-1) = reshape(state%s1          %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%s2          (i_point:i_point+n_points_z-1) = reshape(state%s2          %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%s1_old      (i_point:i_point+n_points_z-1) = reshape(state%s1_old      %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%hwm_plus    (i_point:i_point+n_points_z-1) = reshape(state%hwm_plus    %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%vel_h_plus  (i_point:i_point+n_points_z-1) = reshape(state%vel_h_plus  %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%dveldz_plus (i_point:i_point+n_points_z-1) = reshape(state%dveldz_plus %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%log_hwm_plus(i_point:i_point+n_points_z-1) = reshape(state%log_hwm_plus%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
+    flattened_state%hwm_idx     (i_point:i_point+n_points_z-1) = reshape(state%hwm_idx     %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
 
     flattened_stress%tauw1(i_point:i_point+n_points_z-1) = reshape(stress%tauw1%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
     flattened_stress%tauw2(i_point:i_point+n_points_z-1) = reshape(stress%tauw2%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
@@ -640,9 +633,6 @@ module mod_wallmodel
     flattened_metric%tauw2_prev(i_point:i_point+n_points_z-1) = reshape(metric%tauw2_prev%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
     flattened_metric%tauw_prev (i_point:i_point+n_points_z-1) = reshape(metric%tauw_prev %z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
 
-    ! flattened_metric%vel1(i_point:i_point+n_points_z-1) = reshape(metric%vel1%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    ! flattened_metric%vel1_profile_err(i_point:i_point+n_points_z-1) = reshape(metric%vel1_profile_err%z(1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z/))
-    ! flattened_metric%vel1_profile(i_point:i_point+n_points_z-1, 1:n(3)) = reshape(metric%vel1_profile%z(1:n(3), 1:n(1):interval(1), 1:n(2):interval(2), ibound), (/n_points_z, n(3)/))
   end subroutine coarsen_and_flatten_wall_data
 
   subroutine wallmodel_loglaw(visc, hwm, flattened_state, flattened_stress, flattened_metric)
@@ -713,7 +703,6 @@ module mod_wallmodel
     real(rp) :: u1, u2, upar, tauw_tot, tauw1, tauw2, factor
     integer :: n_points, i
     logical, save :: is_first = .true.
-    integer, save :: istep
 
     real(rp), allocatable, dimension(:,:), save :: drl_state
     real(rp), allocatable, dimension(:,:), save :: drl_action
@@ -722,25 +711,27 @@ module mod_wallmodel
     n_points = size(flattened_state%vel1)
 
     if (is_first) then
-      is_first = .false.
-      istep = 0
       call init_smartredis_mpi(db_clustered, MPI_COMM_WORLD)
-      allocate(drl_state (2, n_points))
+      allocate(drl_state (3, n_points))
       allocate(drl_reward(2, n_points))
       allocate(drl_action(1, n_points))
-    else
-      istep = istep + action_interval
-    end if
-
-    if (myid == 0) then
-      print*, "istep = ", istep
     end if
     
-    drl_state(1, :) = flattened_state%s1
-    drl_state(2, :) = flattened_state%s2
+    ! drl_state(1, :) = flattened_state%s1
+    ! drl_state(2, :) = flattened_state%s2
+    ! drl_state(3, :) = flattened_state%s1_old
+    ! drl_state(4, :) = flattened_state%hwm_plus
+    ! drl_state(5, :) = flattened_state%vel_h_plus
+    ! drl_state(6, :) = flattened_state%dveldz_plus
+    ! drl_state(7, :) = flattened_state%log_hwm_plus
+    drl_state(1, :) = flattened_state%hwm_plus
+    drl_state(2, :) = flattened_state%vel_h_plus
+    drl_state(3, :) = flattened_state%dveldz_plus
     call put_state(trim(adjustl(tag))//".state", shape(drl_state), drl_state)
     !
-    if (istep /= 0) then
+    if (is_first) then
+      is_first = .false.
+    else
       drl_reward(1, :) = flattened_metric%tauw1
       drl_reward(2, :) = flattened_metric%tauw1_prev
       call put_reward(trim(adjustl(tag))//".reward", shape(drl_reward), drl_reward)

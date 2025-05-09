@@ -65,8 +65,7 @@ program cales
                                  rkcoeff,small, &
                                  datadir, &
                                  read_input, &
-                                 sgstype,lwm,hwm, &
-                                 tag,action_interval
+                                 sgstype,lwm,hwm
   use mod_sanity         , only: test_sanity_input
 #if !defined(_OPENACC)
   use mod_solver         , only: solver
@@ -375,7 +374,7 @@ program cales
   call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   if(any(lwm(0:1,1:3) /= 0)) then
     call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+                                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
     call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   end if
   call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
@@ -502,7 +501,7 @@ program cales
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       if(any(lwm(0:1,1:3) /= 0).and..false.) then
         call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       end if
       call fillps(n,dli,dzfi,dtrki,u,v,w,pp)
@@ -513,7 +512,7 @@ program cales
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
       if(any(lwm(0:1,1:3) /= 0).and.(irk == 3)) then
         call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag)
+                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
       end if
       call updatep(n,dli,dzci,dzfi,alpha,pp,p)

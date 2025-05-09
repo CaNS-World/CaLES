@@ -35,15 +35,18 @@ module mod_params
   ! command-line arguments
   !
   character(len=100), protected :: tag = ''
-  logical , protected :: db_clustered = .false.
-  integer , protected :: action_interval = 1
+  character(len=500), protected :: restart_file
+  integer , protected :: cfd_seed = 12345
   integer , protected :: agent_interval = 1
+  integer , protected :: action_start_step = 0
+  integer , protected :: cfd_steps_per_action = 1
+  real(rp), protected :: action_start_time = 0._rp
+  real(rp), protected :: time_duration_per_action = 1._rp
   real(rp), protected :: tauw_ref_min = 0.001_rp
   real(rp), protected :: tauw_ref_max = 0.001_rp
   real(rp), protected :: hwm_min = 0.1_rp
   real(rp), protected :: hwm_max = 0.1_rp
-  integer , protected :: cfd_seed = 12345
-  character(len=500), protected :: restart_file
+  logical , protected :: db_clustered = .false.
   !
   ! input file
   !
@@ -152,9 +155,18 @@ module mod_params
       else if(adjustl(trim(arg(:pos-1))) == "--db_clustered") then
         arg_val = trim(adjustl(arg(pos+1:)))
         read(arg_val,*) db_clustered
-      else if(adjustl(trim(arg(:pos-1))) == "--action_interval") then
+      else if(adjustl(trim(arg(:pos-1))) == "--action_start_step") then
         arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) action_interval
+        read(arg_val,*) action_start_step
+      else if(adjustl(trim(arg(:pos-1))) == "--action_start_time") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) action_start_time
+      else if(adjustl(trim(arg(:pos-1))) == "--cfd_steps_per_action") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) cfd_steps_per_action
+      else if(adjustl(trim(arg(:pos-1))) == "--time_duration_per_action") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) time_duration_per_action
       else if(adjustl(trim(arg(:pos-1))) == "--agent_interval") then
         arg_val = trim(adjustl(arg(pos+1:)))
         read(arg_val,*) agent_interval

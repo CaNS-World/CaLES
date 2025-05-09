@@ -7,7 +7,7 @@ MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 SHELL=/bin/bash
 
 # Project name
-NAME := cales
+NAME := cales_new
 
 TARGET := $(NAME)
 INPUT_FILE := input.nml
