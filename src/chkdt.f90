@@ -33,16 +33,16 @@ module mod_chkdt
     real(rp), intent(in), dimension(0:,0:,0:) :: visct,u,v,w
     real(rp), intent(out) :: dtmax
     real(rp) :: dxi,dyi,dzi
-    real(rp) :: ux,uy,uz,vx,vy,vz,wx,wy,wz
+    real(rp) :: ux,uy,uz,vx,vy,vz,wx,wy,wz,uc,vc,wc
     real(rp) :: dtix,dtiy,dtiz,dti
     real(rp) :: dtidx,dtidy,dtidz,dtid,dl2i
     real(rp) :: viscx,viscy,viscz
+    real(rp) :: this_dti,this_dtid
     integer :: i,j,k
     !
     dxi = 1._rp/dl(1)
     dyi = 1._rp/dl(2)
     dzi = 1._rp/dl(3)
-    dl2i  = dxi*dxi+dyi*dyi
     !
     dti  = 0._rp
     dtid = 0._rp
@@ -53,47 +53,28 @@ module mod_chkdt
     do k=1,n(3)
       do j=1,n(2)
         do i=1,n(1)
-          ux = abs(u(i,j,k))
-          vx = 0.25_rp*abs( v(i,j,k)+v(i,j-1,k)+v(i+1,j,k)+v(i+1,j-1,k) )
-          wx = 0.25_rp*abs( w(i,j,k)+w(i,j,k-1)+w(i+1,j,k)+w(i+1,j,k-1) )
-          uy = 0.25_rp*abs( u(i,j,k)+u(i,j+1,k)+u(i-1,j+1,k)+u(i-1,j,k) )
-          vy = abs(v(i,j,k))
-          wy = 0.25_rp*abs( w(i,j,k)+w(i,j+1,k)+w(i,j+1,k-1)+w(i,j,k-1) )
-          uz = 0.25_rp*abs( u(i,j,k)+u(i-1,j,k)+u(i-1,j,k+1)+u(i,j,k+1) )
-          vz = 0.25_rp*abs( v(i,j,k)+v(i,j-1,k)+v(i,j-1,k+1)+v(i,j,k+1) )
-          wz = abs(w(i,j,k))
-          dtix = ux*dxi+vx*dyi+wx*dzfi(k)
-          dtiy = uy*dxi+vy*dyi+wy*dzfi(k)
-          dtiz = uz*dxi+vz*dyi+wz*dzci(k)
-          dti  = max(dti,dtix,dtiy,dtiz)
-          !
-          viscx = 0.5_rp*(visct(i,j,k)+visct(i+1,j  ,k  ))
-          viscy = 0.5_rp*(visct(i,j,k)+visct(i  ,j+1,k  ))
-          viscz = 0.5_rp*(visct(i,j,k)+visct(i  ,j  ,k+1))
-          dtidx = viscx*(dl2i+dzfi(k)*dzfi(k))
-          dtidy = viscy*(dl2i+dzfi(k)*dzfi(k))
-          dtidz = viscz*(dl2i+dzci(k)*dzci(k))
+          uc = 0.5_rp*abs(u(i-1,j,k)+u(i,j,k))
+          vc = 0.5_rp*abs(v(i,j-1,k)+v(i,j,k))
+          wc = 0.5_rp*abs(w(i,j,k-1)+w(i,j,k))
+          this_dti = uc*dxi+vc*dyi+wc*dzfi(k)
+          dti = max(dti,this_dti)
           !
 #if defined(_IMPDIFF) && !defined(_IMPDIFF_1D)
-          ! nothing to do
+          this_dtid = 0._rp
 #else
-          dtidx = dtidx + visc*dl2i
-          dtidy = dtidy + visc*dl2i
-          dtidz = dtidz + visc*dl2i
+          this_dtid = visc*(dxi*dxi+dyi*dyi)
 #if !defined(_IMPDIFF_1D)
-          dtidx = dtidx + visc*(dzfi(k)*dzfi(k))
-          dtidy = dtidy + visc*(dzfi(k)*dzfi(k))
-          dtidz = dtidz + visc*(dzci(k)*dzci(k))
+          this_dtid = this_dtid + visc*(dzfi(k)*dzfi(k))
 #endif
 #endif
-          dtid  = max(dtid,dtidx,dtidy,dtidz)
+          dtid  = max(dtid,this_dtid)
         end do
       end do
     end do
     !$acc end data
     !$acc wait(1)
-    if(dti  == 0._rp) dti  = 1._rp
-    if(dtid == 0._rp) dtid = eps
+    if(dti  <= eps) dti  = 1._rp
+    if(dtid <= eps) dtid = eps
     dtmax = min(0.4125_rp/dtid,1.732_rp/dti) ! viscous CFL could be 1.5
     call MPI_ALLREDUCE(MPI_IN_PLACE,dtmax,1,MPI_REAL_RP,MPI_MIN,MPI_COMM_WORLD,ierr)
   end subroutine chkdt
