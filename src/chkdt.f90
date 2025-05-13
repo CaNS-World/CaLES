@@ -14,7 +14,7 @@ module mod_chkdt
   private
   public chkdt
   contains
-  subroutine chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dtmax)
+  subroutine chkdt(n,dl,dzci,dzfi,visc,u,v,w,dtmax)
     !
     ! compute maximum allowed time step, refer to Pieter Wesseling (P200)
     ! for the stability conditions of the advective and diffusion terms
@@ -30,14 +30,11 @@ module mod_chkdt
     real(rp), intent(in), dimension(3) :: dl
     real(rp), intent(in), dimension(0:) :: dzci,dzfi
     real(rp), intent(in) :: visc
-    real(rp), intent(in), dimension(0:,0:,0:) :: visct,u,v,w
+    real(rp), intent(in), dimension(0:,0:,0:) :: u,v,w
     real(rp), intent(out) :: dtmax
     real(rp) :: dxi,dyi,dzi
-    real(rp) :: ux,uy,uz,vx,vy,vz,wx,wy,wz,uc,vc,wc
-    real(rp) :: dtix,dtiy,dtiz,dti
-    real(rp) :: dtidx,dtidy,dtidz,dtid,dl2i
-    real(rp) :: viscx,viscy,viscz
-    real(rp) :: this_dti,this_dtid
+    real(rp) :: uc,vc,wc
+    real(rp) :: this_dti,this_dtid,dti,dtid
     integer :: i,j,k
     !
     dxi = 1._rp/dl(1)
@@ -48,8 +45,7 @@ module mod_chkdt
     dtid = 0._rp
     !$acc data copy(dti,dtid) async(1)
     !$acc parallel loop collapse(3) default(present) reduction(max:dti,dtid) async(1) &
-    !$acc private(ux,uy,uz,vx,vy,vz,wx,wy,wz,dtix,dtiy,dtiz) &
-    !$acc private(viscx,viscy,viscz,dtidx,dtidy,dtidz)
+    !$acc private(uc,vc,wc,this_dti,this_dtid)
     do k=1,n(3)
       do j=1,n(2)
         do i=1,n(1)

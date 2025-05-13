@@ -87,7 +87,7 @@ program cales
 #endif
   use mod_precision      , only: rp,sp,dp,i8,MPI_REAL_RP
   use mod_typedef        , only: Bound
-  use mod_wallmodel      , only: compute_and_apply_wall_stress
+  use mod_wallmodel      , only: compute_and_assign_wall_stress
   implicit none
   integer , dimension(3) :: lo,hi,n,n_x_fft,n_y_fft,lo_z,hi_z,n_z
   real(rp), allocatable, dimension(:,:,:) :: u,v,w,p,pp,visct
@@ -370,11 +370,11 @@ program cales
   end if
   !$acc enter data copyin(u,v,w,p) create(pp,visct) async
   !$acc wait
-
+  !
   call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   if(any(lwm(0:1,1:3) /= 0)) then
-    call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                       cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
+    call compute_and_assign_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,u,v,w, &
+                                        cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
     call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
   end if
   call boundp(cbcpre,n,bcp,nb,is_bound,dl,dzc,p)
@@ -400,7 +400,7 @@ program cales
     !$acc wait(1)
     include 'out3d.h90'
   end if
-  call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dt_cfl)
+  call chkdt(n,dl,dzci,dzfi,visc,u,v,w,dt_cfl)
   dt = merge(dt_f,min(cfl*dt_cfl,dtmax),dt_f > 0.)
   if(myid == 0) print*, 'dt_cfl = ', dt_cfl, 'dt = ', dt
   dti = 1./dt
@@ -500,8 +500,8 @@ program cales
       dpdl(:) = dpdl(:) + f(:) ! dt multiplied
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       if(any(lwm(0:1,1:3) /= 0).and..false.) then
-        call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
+        call compute_and_assign_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,u,v,w, &
+                                            cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.false.,dl,dzc,dzf,u,v,w)
       end if
       call fillps(n,dli,dzfi,dtrki,u,v,w,pp)
@@ -511,8 +511,8 @@ program cales
       call correc(n,dli,dzci,dtrk,pp,u,v,w)
       call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
       if(any(lwm(0:1,1:3) /= 0).and.(irk == 3)) then
-        call compute_and_apply_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,hwm,u,v,w, &
-                                           cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
+        call compute_and_assign_wall_stress(n,nb,is_bound,lwm,l,dl,zc,zf,dzc,dzf,visc,u,v,w, &
+                                            cbcsgs,bcu,bcv,bcw,bcs,bcu_mag,bcv_mag,bcw_mag,time)
         call bounduvw(cbcvel,n,bcu,bcv,bcw,nb,is_bound,.true.,dl,dzc,dzf,u,v,w)
       end if
       call updatep(n,dli,dzci,dzfi,alpha,pp,p)
@@ -539,7 +539,7 @@ program cales
     if(icheck > 0.and.mod(istep,max(icheck,1)) == 0) then
       ! set icheck=1 to verify restart
       if(myid == 0) print*, 'Checking stability and divergence...'
-      call chkdt(n,dl,dzci,dzfi,visc,visct,u,v,w,dt_cfl)
+      call chkdt(n,dl,dzci,dzfi,visc,u,v,w,dt_cfl)
       dt = merge(dt_f,min(cfl*dt_cfl,dtmax),dt_f > 0.)
       if(myid == 0) print*, 'dt_cfl = ', dt_cfl, 'dt = ', dt
       if(dt_cfl < small) then
