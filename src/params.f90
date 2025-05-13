@@ -225,7 +225,6 @@ module mod_params
       close(iunit)
       error stop
     end if
-    close(iunit)
     !
     dl(:) = l(:)/(1.*ng(:))
     dli(:) = dl(:)**(-1)
