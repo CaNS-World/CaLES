@@ -7,7 +7,7 @@ MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 SHELL=/bin/bash
 
 # Project name
-NAME := cales_new
+NAME := cales
 
 TARGET := $(NAME)
 INPUT_FILE := input.nml
@@ -95,14 +95,22 @@ include $(LIBS_DIR)/external.mk
 
 # Rules to generate config files if missing
 $(CONFIG_DIR)/compilers.mk:
-	@echo "Generating $(CONFIG_DIR)/compilers.mk from $(CONFIG_DIR)/compilers.mk.example..."
-	cp $(CONFIG_DIR)/compilers.mk.example $(CONFIG_DIR)/compilers.mk
+	@if [ ! -f $(CONFIG_DIR)/compilers.mk ]; then \
+		echo "Generating $(CONFIG_DIR)/compilers.mk from $(CONFIG_DIR)/compilers.mk.example..."; \
+		cp $(CONFIG_DIR)/compilers.mk.example $(CONFIG_DIR)/compilers.mk; \
+	fi
 $(CONFIG_DIR)/flags.mk:
-	@echo "Generating $(CONFIG_DIR)/flags.mk from $(CONFIG_DIR)/flags.mk.example..."
-	cp $(CONFIG_DIR)/flags.mk.example $(CONFIG_DIR)/flags.mk
+	@if [ ! -f $(CONFIG_DIR)/flags.mk ]; then \
+		echo "Generating $(CONFIG_DIR)/flags.mk from $(CONFIG_DIR)/flags.mk.example..."; \
+		cp $(CONFIG_DIR)/flags.mk.example $(CONFIG_DIR)/flags.mk; \
+	fi
 $(CONFIG_DIR)/libs.mk:
-	@echo "Generating $(CONFIG_DIR)/libs.mk from $(CONFIG_DIR)/libs.mk.example..."
-	cp $(CONFIG_DIR)/libs.mk.example $(CONFIG_DIR)/libs.mk
+	@if [ ! -f $(CONFIG_DIR)/libs.mk ]; then \
+		echo "Generating $(CONFIG_DIR)/libs.mk from $(CONFIG_DIR)/libs.mk.example..."; \
+		cp $(CONFIG_DIR)/libs.mk.example $(CONFIG_DIR)/libs.mk; \
+	fi
 $(ROOT_DIR)/build.conf:
-	@echo "Generating $(ROOT_DIR)/build.conf from $(ROOT_DIR)/build.conf.example..."
-	cp $(ROOT_DIR)/build.conf.example $(ROOT_DIR)/build.conf
+	@if [ ! -f $(ROOT_DIR)/build.conf ]; then \
+		echo "Generating $(ROOT_DIR)/build.conf from $(ROOT_DIR)/build.conf.example..."; \
+		cp $(ROOT_DIR)/build.conf.example $(ROOT_DIR)/build.conf; \
+	fi
