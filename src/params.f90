@@ -41,7 +41,7 @@ module mod_params
   integer , protected :: action_start_step = 0
   integer , protected :: cfd_steps_per_action = 1
   real(rp), protected :: action_start_time = 0._rp
-  real(rp), protected :: time_duration_per_action = 1._rp
+  real(rp), protected :: time_duration_per_action = 0._rp
   real(rp), protected :: tauw_ref_min = 0.001_rp
   real(rp), protected :: tauw_ref_max = 0.001_rp
   real(rp), protected :: hwm_min = 0.1_rp
