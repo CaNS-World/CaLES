@@ -117,7 +117,7 @@ module mod_wallmodel
     if (is_first) then
       is_first = .false.
 
-      action_next_time = max(time, action_start_time)
+      action_next_time = max(time, time + action_start_time)
       wallmodel_dispatch_table(WM_LOG)%ptr => wallmodel_loglaw
       wallmodel_dispatch_table(WM_LAM)%ptr => wallmodel_laminar
       wallmodel_dispatch_table(WM_DRL)%ptr => wallmodel_DRL
