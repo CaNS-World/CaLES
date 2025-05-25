@@ -235,7 +235,8 @@ module mod_wallmodel
       allocate(random_values(0:n(1)+1, 0:n(2)+1))
 
       if (is_bound(0, 3) .and. lwm(0, 3) /= 0) then
-        call random_number(random_values)
+        call random_number(random_values(0:n(1)+1, 0:n(2)+1))
+        random_values = 0.5 * n(1) * n(2) * random_values / sum(random_values(1:n(1), 1:n(2)))
         wall_state%hwm%z(0:n(1)+1, 0:n(2)+1, 0) = hwm_min + random_values * (hwm_max - hwm_min)
         do j = 1, n(2)
           do i = 1, n(1)
@@ -249,7 +250,8 @@ module mod_wallmodel
       end if
 
       if (is_bound(1, 3) .and. lwm(1, 3) /= 0) then
-        call random_number(random_values)
+        call random_number(random_values(0:n(1)+1, 0:n(2)+1))
+        random_values = 0.5 * n(1) * n(2) * random_values / sum(random_values(1:n(1), 1:n(2)))
         wall_state%hwm%z(0:n(1)+1, 0:n(2)+1, 1) = hwm_min + random_values * (hwm_max - hwm_min)
         do j = 1, n(2)
           do i = 1, n(1)
@@ -261,6 +263,7 @@ module mod_wallmodel
           end do
         end do
       end if
+
       deallocate(random_values)
       !
       ! Initialize wall_stress to compute the initial state and reward (unused)
@@ -273,16 +276,21 @@ module mod_wallmodel
       wall_stress%tauw_prev %z(:,:,1) = 0._rp
       !
       allocate(random_values(0:n(1)+1, 0:n(2)+1))
+
       call random_number(random_values(0:n(1)+1, 0:n(2)+1))
+      random_values = 0.5 * n(1) * n(2) * random_values / sum(random_values(1:n(1), 1:n(2)))
       random_values = tauw_ref_min + random_values * (tauw_ref_max - tauw_ref_min)
       wall_stress%tauw1%z(0:n(1)+1, 0:n(2)+1, 0) = random_values
       wall_stress%tauw2%z(0:n(1)+1, 0:n(2)+1, 0) = 0._rp
       wall_stress%tauw %z(0:n(1)+1, 0:n(2)+1, 0) = random_values
+
       call random_number(random_values(0:n(1)+1, 0:n(2)+1))
+      random_values = 0.5 * n(1) * n(2) * random_values / sum(random_values(1:n(1), 1:n(2)))
       random_values = tauw_ref_min + random_values * (tauw_ref_max - tauw_ref_min)
       wall_stress%tauw1%z(0:n(1)+1, 0:n(2)+1, 1) = random_values
       wall_stress%tauw2%z(0:n(1)+1, 0:n(2)+1, 1) = 0._rp
       wall_stress%tauw %z(0:n(1)+1, 0:n(2)+1, 1) = random_values
+      
       deallocate(random_values)
 
       !$acc enter data copyin(interval) async(1)
