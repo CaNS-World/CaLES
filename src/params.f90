@@ -32,22 +32,6 @@ module mod_params
   real(rp), protected :: b_log   = 5.20_rp
   real(rp), protected :: c_smag  = 0.11_rp
   !
-  ! command-line arguments
-  !
-  character(len=100), protected :: tag = ''
-  character(len=500), protected :: restart_file
-  integer , protected :: cfd_seed = 12345
-  integer , protected :: agent_interval = 1
-  integer , protected :: action_start_step = 0
-  integer , protected :: cfd_steps_per_action = 1
-  real(rp), protected :: action_start_time = 0._rp
-  real(rp), protected :: time_duration_per_action = 0._rp
-  real(rp), protected :: tauw_ref_min = 0.001_rp
-  real(rp), protected :: tauw_ref_max = 0.001_rp
-  real(rp), protected :: hwm_min = 0.1_rp
-  real(rp), protected :: hwm_max = 0.1_rp
-  logical , protected :: db_clustered = .false.
-  !
   ! input file
   !
   integer , protected, dimension(3) :: ng
@@ -100,6 +84,22 @@ module mod_params
                         cudecomp_is_t_in_place
   logical :: exists
 #endif
+  !
+  ! command-line arguments
+  !
+  character(len=100), protected :: tag = ''
+  character(len=500), protected :: restart_file
+  integer , protected :: cfd_seed = 12345
+  integer , protected :: agent_interval = 1
+  integer , protected :: action_start_step = 0
+  integer , protected :: cfd_steps_per_action = 1
+  real(rp), protected :: action_start_time = 0._rp
+  real(rp), protected :: time_duration_per_action = 0._rp
+  real(rp), protected :: tauw_ref_min = 0.001_rp
+  real(rp), protected :: tauw_ref_max = 0.001_rp
+  real(rp), protected :: hwm_min
+  real(rp), protected :: hwm_max
+  logical , protected :: db_clustered = .false.
 
   contains
 
@@ -137,64 +137,6 @@ module mod_params
                        cudecomp_t_comm_backend,cudecomp_is_t_enable_nccl,cudecomp_is_t_enable_nvshmem, &
                        cudecomp_h_comm_backend,cudecomp_is_h_enable_nccl,cudecomp_is_h_enable_nvshmem
 #endif
-    !
-    ! command-line arguments
-    !
-    ! mpirun -n 4 cales --t_episode=100.0
-    restart_file = trim(datadir)//'fld.bin'
-    nargs = command_argument_count()
-    do i = 1,nargs
-      call get_command_argument(i,arg)
-        pos = scan(adjustl(trim(arg)),"=")
-      if(adjustl(trim(arg(:pos-1))) == "--tag") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        tag = arg_val
-      else if(adjustl(trim(arg(:pos-1))) == "--restart_file") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        restart_file = arg_val
-      else if(adjustl(trim(arg(:pos-1))) == "--db_clustered") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) db_clustered
-      else if(adjustl(trim(arg(:pos-1))) == "--action_start_step") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) action_start_step
-      else if(adjustl(trim(arg(:pos-1))) == "--action_start_time") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) action_start_time
-      else if(adjustl(trim(arg(:pos-1))) == "--cfd_steps_per_action") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) cfd_steps_per_action
-      else if(adjustl(trim(arg(:pos-1))) == "--time_duration_per_action") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) time_duration_per_action
-      else if(adjustl(trim(arg(:pos-1))) == "--agent_interval") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) agent_interval
-      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_min") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) tauw_ref_min
-      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_max") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) tauw_ref_max
-      else if(adjustl(trim(arg(:pos-1))) == "--hwm_min") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) hwm_min
-      else if(adjustl(trim(arg(:pos-1))) == "--hwm_max") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) hwm_max
-      else if(adjustl(trim(arg(:pos-1))) == "--cfd_seed") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) cfd_seed
-      else if(adjustl(trim(arg(:pos-1))) == "--kap_log") then
-        arg_val = trim(adjustl(arg(pos+1:)))
-        read(arg_val,*) kap_log
-      else
-        if(myid == 0) print*, 'Error unknown command-line argument'
-        if(myid == 0) print*, 'Aborting...'
-        call MPI_FINALIZE(ierr)
-        error stop
-      end if
-    end do
     !
     ! input.nml
     !
@@ -294,5 +236,65 @@ module mod_params
     cudecomp_is_t_in_place = .false.
 #endif
     close(iunit)
+    !
+    ! command-line arguments
+    !
+    ! mpirun -n 4 cales --t_episode=100.0
+    restart_file = trim(datadir)//'fld.bin'
+    hwm_min = hwm
+    hwm_max = hwm
+    nargs = command_argument_count()
+    do i = 1,nargs
+      call get_command_argument(i,arg)
+        pos = scan(adjustl(trim(arg)),"=")
+      if(adjustl(trim(arg(:pos-1))) == "--tag") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        tag = arg_val
+      else if(adjustl(trim(arg(:pos-1))) == "--restart_file") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        restart_file = arg_val
+      else if(adjustl(trim(arg(:pos-1))) == "--db_clustered") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) db_clustered
+      else if(adjustl(trim(arg(:pos-1))) == "--action_start_step") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) action_start_step
+      else if(adjustl(trim(arg(:pos-1))) == "--action_start_time") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) action_start_time
+      else if(adjustl(trim(arg(:pos-1))) == "--cfd_steps_per_action") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) cfd_steps_per_action
+      else if(adjustl(trim(arg(:pos-1))) == "--time_duration_per_action") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) time_duration_per_action
+      else if(adjustl(trim(arg(:pos-1))) == "--agent_interval") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) agent_interval
+      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_min") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) tauw_ref_min
+      else if(adjustl(trim(arg(:pos-1))) == "--tauw_ref_max") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) tauw_ref_max
+      else if(adjustl(trim(arg(:pos-1))) == "--hwm_min") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) hwm_min
+      else if(adjustl(trim(arg(:pos-1))) == "--hwm_max") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) hwm_max
+      else if(adjustl(trim(arg(:pos-1))) == "--cfd_seed") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) cfd_seed
+      else if(adjustl(trim(arg(:pos-1))) == "--kap_log") then
+        arg_val = trim(adjustl(arg(pos+1:)))
+        read(arg_val,*) kap_log
+      else
+        if(myid == 0) print*, 'Error unknown command-line argument'
+        if(myid == 0) print*, 'Aborting...'
+        call MPI_FINALIZE(ierr)
+        error stop
+      end if
+    end do
   end subroutine read_input
 end module mod_params
