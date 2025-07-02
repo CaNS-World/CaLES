@@ -549,10 +549,10 @@ module mod_wallmodel
                   coef = (this_hwm - (l(3) - zc(k1))) / dzc(k2)
                   sgn = -1._rp
                 end if
-                u1 = 0.5_rp * (u(i - 1, j, k1) + u(i, j, k1))
-                v1 = 0.5_rp * (v(i, j - 1, k1) + v(i, j, k1))
-                u2 = 0.5_rp * (u(i - 1, j, k2) + u(i, j, k2))
-                v2 = 0.5_rp * (v(i, j - 1, k2) + v(i, j, k2))
+                u1 = 0.5_rp * (u(i-1, j, k1) + u(i, j, k1))
+                v1 = 0.5_rp * (v(i, j-1, k1) + v(i, j, k1))
+                u2 = 0.5_rp * (u(i-1, j, k2) + u(i, j, k2))
+                v2 = 0.5_rp * (v(i, j-1, k2) + v(i, j, k2))
                 uh = vel_relative(u1, u2, coef, 0._rp)
                 vh = vel_relative(v1, v2, coef, 0._rp)
                 vel1 = sqrt(u1**2 + v1**2)
